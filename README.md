@@ -1,130 +1,143 @@
-# Energy Options Research Database
+# Energex: Energy Market Analysis Tools
 
-A data pipeline for downloading, processing, and analyzing energy price options data using Polars and DuckDB. This project creates a queryable database of historical energy options data for research purposes.
+A Python package for downloading, analyzing, and visualizing energy market data using Polars and DuckDB.
 
 ## Features
 
-- Automated downloads of energy options data from multiple exchanges
+- Automated data collection from major energy markets
 - Fast data processing using Polars DataFrames
 - Persistent storage in DuckDB with SQL querying capabilities
-- Data quality checks and validation
-- Configurable download schedules and data sources
+- Technical analysis tools including:
+  - Moving averages (20, 50, 200 days)
+  - RSI (Relative Strength Index)
+  - Trading signals (Golden Cross, Death Cross)
+- Interactive visualizations using Plotly
 
 ## Installation
 
-1. Clone the repository:
 ```bash
-git clone https://github.com/yourusername/energy-options-db.git
-cd energy-options-db
-```
-
-2. Install uv if you haven't already:
-```bash
+# Install using uv (recommended)
 curl -LsSf https://astral.sh/uv/install.sh | sh
+uv pip install energex
+
+# Or using pip
+pip install energex
 ```
 
-3. Create a virtual environment and install dependencies using uv:
-```bash
-uv venv
-source .venv/bin/activate  # On Windows: .venv\Scripts\activate
-uv pip install -r requirements.txt
-```
+## Quick Start
 
-Note: The project uses [uv](https://github.com/astral/uv) for dependency management due to its superior performance and reproducible builds.
+```python
+from energex import TechnicalAnalyzer
+
+# Initialize analyzer
+analyzer = TechnicalAnalyzer()
+
+# Analyze crude oil futures
+df, signals, fig = analyzer.analyze("CL=F")
+
+# Save analysis chart
+fig.write_html("crude_oil_analysis.html")
+
+# Print recent trading signals
+print("Recent Trading Signals:")
+print(signals)
+```
 
 ## Project Structure
 
 ```
-energy-options-db/
+energex/
 ├── src/
-│   ├── downloaders/       # Data download modules for different exchanges
-│   ├── processors/        # Data cleaning and transformation
-│   ├── database/          # DuckDB interface and schema management
-│   └── utils/            # Helper functions and utilities
-├── config/
-│   ├── sources.yaml      # Data source configurations
-│   └── schema.sql        # Database schema definitions
-├── requirements.txt      # Project dependencies managed by uv
-├── requirements-dev.txt  # Development dependencies
-├── tests/                # Unit and integration tests
-├── notebooks/           # Analysis notebooks
-└── data/
-    ├── raw/             # Downloaded raw data
-    ├── processed/       # Cleaned and transformed data
-    └── database/        # DuckDB database files
+│   ├── energex/
+│   │   ├── __init__.py
+│   │   ├── database.py       # DuckDB interface
+│   │   ├── data_fetcher.py   # Data collection
+│   │   └── analysis.py       # Technical analysis
+│   └── examples/
+│       ├── 01_basic_queries.py
+│       ├── 02_technical_analysis.py
+│       └── 03_spread_analysis.py
+├── tests/                    # Unit and integration tests
+├── pyproject.toml           # Project configuration
+└── README.md
+```
+
+## Basic Usage
+
+### 1. Query Historical Data
+
+```python
+from energex import EnergyQueryTool
+
+# Initialize query tool
+tool = EnergyQueryTool()
+
+# Get latest prices
+prices = tool.get_latest_prices()
+
+# Get daily returns for crude oil
+returns = tool.get_daily_returns("CL=F")
+
+# Analyze trading volume
+volume = tool.get_volume_analysis("NG=F")
+```
+
+### 2. Technical Analysis
+
+```python
+from energex import TechnicalAnalyzer
+
+analyzer = TechnicalAnalyzer()
+
+# Full analysis with visualization
+df, signals, fig = analyzer.analyze("CL=F")
+
+# Access individual components
+df = analyzer.get_data("CL=F")
+df = analyzer.add_moving_averages(df)
+df = analyzer.add_rsi(df)
+```
+
+### 3. Spread Analysis
+
+```python
+from energex import SpreadAnalyzer
+
+analyzer = SpreadAnalyzer()
+
+# Analyze WTI-Brent spread
+spread_data = analyzer.get_spread_data("CL=F", "BZ=F")
+stats = analyzer.calculate_spread_stats(spread_data)
 ```
 
 ## Configuration
 
-1. Copy the example configuration:
+The package uses DuckDB for storage and can be configured through environment variables:
+
 ```bash
-cp config/sources.example.yaml config/sources.yaml
+ENERGEX_DB_PATH=/path/to/database.db
+ENERGEX_DATA_DIR=/path/to/data
 ```
 
-2. Edit `config/sources.yaml` to set up your data sources and API keys:
-```yaml
-sources:
-  exchange_name:
-    api_key: your_api_key
-    base_url: https://api.exchange.com
-    instruments:
-      - crude_oil_options
-      - natural_gas_options
-```
+## Development
 
-## Usage
-
-1. Initialize the database:
+1. Clone the repository:
 ```bash
-python src/database/init_db.py
+git clone https://github.com/oldhero5/energex.git
+cd energex
 ```
 
-2. Download and process data:
+2. Set up the development environment:
 ```bash
-python src/main.py --download-data
+uv venv
+source .venv/bin/activate  # On Windows: .venv\Scripts\activate
+uv pip install -e ".[dev]"
 ```
 
-3. Query the database using DuckDB:
-```python
-import duckdb
-
-# Connect to the database
-con = duckdb.connect('data/database/energy_options.db')
-
-# Example query
-result = con.execute("""
-    SELECT 
-        date,
-        instrument,
-        strike,
-        AVG(implied_volatility) as avg_iv
-    FROM options
-    WHERE date >= '2024-01-01'
-    GROUP BY date, instrument, strike
-    ORDER BY date
-""").fetchdf()
+3. Run tests:
+```bash
+pytest tests/
 ```
-
-## Data Model
-
-The database schema includes the following main tables:
-
-- `options`: Core options data
-  - date: DATE
-  - instrument: VARCHAR
-  - strike: DECIMAL
-  - expiry: DATE
-  - call_put: VARCHAR
-  - price: DECIMAL
-  - implied_volatility: DECIMAL
-  - volume: INTEGER
-  - open_interest: INTEGER
-
-- `underlying`: Underlying asset prices
-  - date: DATE
-  - instrument: VARCHAR
-  - price: DECIMAL
-  - volume: INTEGER
 
 ## Contributing
 
@@ -140,5 +153,8 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 
 ## Acknowledgments
 
-- Data provided by [Exchange Names]
-- Built with [Polars](https://pola.rs/) and [DuckDB](https://duckdb.org/)
+- Data provided by Yahoo Finance
+- Built with:
+  - [Polars](https://pola.rs/)
+  - [DuckDB](https://duckdb.org/)
+  - [Plotly](https://plotly.com/)
