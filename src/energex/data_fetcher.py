@@ -1,96 +1,112 @@
+# src/energex/data_fetcher.py
 import yfinance as yf
 import polars as pl
 from datetime import datetime, timedelta
+import pytz
 
 class EnergyDataFetcher:
     ENERGY_SYMBOLS = {
-        "CL=F": "Crude Oil Futures",
-        "NG=F": "Natural Gas Futures",
-        "HO=F": "Heating Oil Futures",
-        "RB=F": "RBOB Gasoline Futures",
-        "BZ=F": "Brent Crude Oil Futures",
-        "XLE": "Energy Select Sector SPDR Fund",  # Energy sector ETF
-        "USO": "United States Oil Fund",          # Oil ETF
-        "UNG": "United States Natural Gas Fund"   # Natural Gas ETF
+        'crude': {'ticker': 'CL=F', 'name': 'Crude Oil Futures'},
+        'brent': {'ticker': 'BZ=F', 'name': 'Brent Crude Oil Futures'},
+        'gas': {'ticker': 'NG=F', 'name': 'Natural Gas Futures'}
     }
     
     def __init__(self):
-        self.start_date = (datetime.now() - timedelta(days=365)).strftime('%Y-%m-%d')
-        self.end_date = datetime.now().strftime('%Y-%m-%d')
-    
-    def fetch_security(self, symbol: str) -> pl.DataFrame:
-        """Fetch historical data for a single security."""
-        data = yf.download(symbol, start=self.start_date, end=self.end_date)
+        # Initialize with UTC timezone
+        self.end_time = datetime.now(pytz.UTC)
+        self.start_time = self.end_time - timedelta(days=1)
         
-        # Handle MultiIndex columns by flattening them
-        data.columns = [col[0] if isinstance(col, tuple) else col for col in data.columns]
-        df = pl.from_pandas(data.reset_index())
+    def get_commodity_data(self, commodity: str) -> pl.DataFrame:
+        """
+        Fetch intraday commodity data.
+        Args:
+            commodity: The commodity key (crude, brent, gas)
+        Returns:
+            Polars DataFrame with standardized columns
+        """
+        ticker = self.ENERGY_SYMBOLS[commodity]['ticker']
+        print(f"Downloading {commodity} ({ticker}) data...")
         
-        print(f"Original columns in DataFrame: {df.columns}")
-        
-        # Start with basic columns that should always exist
-        processed_df = (df
-            .with_columns([
-                pl.lit(symbol).alias("symbol"),
-                pl.col("Date").cast(pl.Date).alias("date")
-            ])
-            .rename({
-                'Open': 'open',
-                'High': 'high',
-                'Low': 'low',
-                'Close': 'close',
-                'Volume': 'volume'
-            }))
-        
-        # Add adj_close if it exists, otherwise use close
-        if 'Adj Close' in df.columns:
-            processed_df = processed_df.with_columns([
-                pl.col('Adj Close').alias('adj_close')
-            ])
-        else:
-            processed_df = processed_df.with_columns([
-                pl.col('close').alias('adj_close')
-            ])
-            print(f"Note: No Adj Close for {symbol}, using regular close price")
-        
-        # Drop the original Date column and ensure column order
-        processed_df = processed_df.drop("Date")
-        
-        print(f"Final columns: {processed_df.columns}")
-        return processed_df
+        try:
+            # Download data using the actual ticker symbol
+            data = yf.download(
+                ticker,
+                start=self.start_time,
+                end=self.end_time,
+                interval='1m'
+            )
+            
+            if data.empty:
+                print(f"No data returned for {commodity} ({ticker})")
+                return pl.DataFrame()
+                
+            # Reset index and handle multi-index columns
+            df = data.reset_index()
+            df.columns = [col[0] if isinstance(col, tuple) else col for col in df.columns]
+            
+            # Convert to Polars DataFrame and add symbol
+            df = pl.from_pandas(df)
+            df = df.with_columns(pl.lit(ticker).alias('Symbol'))
+            
+            # Sort and select columns in specific order
+            df = (df
+                .sort(['Symbol', 'Datetime'])
+                .select([
+                    'Datetime',
+                    'Symbol',
+                    'Open',
+                    'High',
+                    'Low',
+                    'Close',
+                    'Volume'
+                ])
+            )
+            
+            print(f"Got {len(df)} rows for {commodity} ({ticker})")
+            return df
+            
+        except Exception as e:
+            print(f"Error downloading {commodity} ({ticker}): {str(e)}")
+            return pl.DataFrame()
 
-    
-    def fetch_all_securities(self) -> dict[str, pl.DataFrame]:
-        """Fetch historical data for all energy securities."""
+    def fetch_all_commodities(self) -> pl.DataFrame:
+        """Fetch and combine data for all commodities."""
+        dfs = []
+        
+        for commodity in self.ENERGY_SYMBOLS:
+            try:
+                df = self.get_commodity_data(commodity)
+                if not df.is_empty():
+                    dfs.append(df)
+            except Exception as e:
+                print(f"Error processing {commodity}: {str(e)}")
+        
+        if not dfs:
+            return pl.DataFrame()
+            
+        # Combine all dataframes
+        combined_data = pl.concat(dfs)
+        
+        # Clean and organize final dataset
+        final_data = (
+            combined_data
+            .sort(['Symbol', 'Datetime'])
+            .select([
+                'Datetime',
+                'Symbol',
+                'Open',
+                'High',
+                'Low',
+                'Close',
+                'Volume'
+            ])
+        )
+        
+        return final_data
+
+    def fetch_all_commodities(self) -> dict[str, pl.DataFrame]:
+        """Fetch intraday data for all commodity symbols."""
         return {
-            symbol: self.fetch_security(symbol)
+            symbol: self.get_commodity_data(symbol)
             for symbol in self.ENERGY_SYMBOLS.keys()
         }
-    
-    def fetch_options(self, symbol: str) -> pl.DataFrame:
-        """Fetch options data for a security."""
-        ticker = yf.Ticker(symbol)
-        options_data = []
-        
-        for date in ticker.options:
-            opt = ticker.option_chain(date)
-            
-            # Process calls
-            calls = pl.from_pandas(opt.calls)
-            calls = calls.with_columns([
-                pl.lit("call").alias("option_type"),
-                pl.lit(date).alias("expiration"),
-                pl.lit(symbol).alias("symbol")
-            ])
-            
-            # Process puts
-            puts = pl.from_pandas(opt.puts)
-            puts = puts.with_columns([
-                pl.lit("put").alias("option_type"),
-                pl.lit(date).alias("expiration"),
-                pl.lit(symbol).alias("symbol")
-            ])
-            
-            options_data.extend([calls, puts])
-        
-        return pl.concat(options_data)

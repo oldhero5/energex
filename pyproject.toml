@@ -1,13 +1,33 @@
 [project]
 name = "energex"
-version = "0.1.0"
-description = "Energy derivatives data collection and storage system"
+version = "0.2.0"
+description = "Energy derivatives data collection and analysis system"
+authors = [{name = "Marty H, email = "oldhero5@proton.me"}]
 readme = "README.md"
-requires-python = ">=3.12"
+requires-python = ">=3.10"
+license = {text = "MIT"}
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Financial and Insurance Industry",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3.10",
+    "Topic :: Office/Business :: Financial :: Investment",
+]
 dependencies = [
-    "polars",
-    "yfinance",
-    "duckdb"
+    "polars>=0.20.0",
+    "yfinance>=0.2.35",
+    "duckdb>=0.9.0",
+    "pytz>=2024.1",
+    "plotly>=5.18.0",
+    "numpy>=1.24.0"
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0.0",
+    "black>=23.0.0",
+    "isort>=5.0.0",
+    "mypy>=1.0.0"
 ]
 
 [build-system]

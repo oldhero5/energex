@@ -1,3 +1,4 @@
+# src/energex/database.py
 import duckdb
 import polars as pl
 from pathlib import Path
@@ -9,87 +10,58 @@ class EnergyDatabase:
         self._init_tables()
     
     def _init_tables(self):
-        """Initialize database tables if they don't exist."""
-        # Drop existing tables if they exist
-        self.conn.execute("DROP TABLE IF EXISTS securities")
-        self.conn.execute("DROP TABLE IF EXISTS options")
+        """Initialize database tables."""
+        # Drop existing tables
+        self.conn.execute("DROP TABLE IF EXISTS intraday_prices")
         
-        # Create securities table with consistent schema
+        # Create intraday prices table
         self.conn.execute("""
-            CREATE TABLE securities (
-                symbol VARCHAR,
-                date DATE,
-                open DOUBLE,
-                high DOUBLE,
-                low DOUBLE,
-                close DOUBLE,
-                volume BIGINT,
-                adj_close DOUBLE,
-                type VARCHAR,
-                description VARCHAR
+            CREATE TABLE intraday_prices (
+                Datetime TIMESTAMP,
+                Symbol VARCHAR,
+                Open DOUBLE,
+                High DOUBLE,
+                Low DOUBLE,
+                Close DOUBLE,
+                Volume BIGINT,
+                
+                -- Add constraints
+                CONSTRAINT pk_intraday PRIMARY KEY (Symbol, Datetime)
             )
         """)
         
-        # Create index on commonly queried columns
+        # Create index for faster queries
         self.conn.execute("""
-            CREATE INDEX IF NOT EXISTS idx_securities_symbol_date 
-            ON securities(symbol, date)
-        """)
-        self.conn.execute("""
-            CREATE TABLE IF NOT EXISTS securities (
-                symbol VARCHAR,
-                date DATE,
-                open DOUBLE,
-                high DOUBLE,
-                low DOUBLE,
-                close DOUBLE,
-                volume BIGINT,
-                adj_close DOUBLE,
-                type VARCHAR,
-                description VARCHAR
-            )
-        """)
-        
-        self.conn.execute("""
-            CREATE TABLE IF NOT EXISTS options (
-                symbol VARCHAR,
-                date TIMESTAMP,
-                expiration TIMESTAMP,
-                strike DOUBLE,
-                option_type VARCHAR,
-                open DOUBLE,
-                high DOUBLE,
-                low DOUBLE,
-                close DOUBLE,
-                volume BIGINT,
-                open_interest BIGINT
-            )
+            CREATE INDEX IF NOT EXISTS idx_intraday_symbol_datetime 
+            ON intraday_prices(Symbol, Datetime)
         """)
     
-    def insert_securities_data(self, df: pl.DataFrame, security_type: str, description: str):
-        """Insert securities data into the database."""
-        print(f"Input DataFrame columns: {df.columns}")
-        
-        # Ensure DataFrame columns match the table schema
-        df = (df.with_columns([
-            pl.col("volume").cast(pl.Int64),
-            pl.lit(security_type).alias("type"),
-            pl.lit(description).alias("description")
-        ]))
-        
-        # Ensure columns are in the correct order
-        expected_columns = ["symbol", "date", "open", "high", "low", "close", 
-                          "volume", "adj_close", "type", "description"]
-        df = df.select(expected_columns)
-        
-        print(f"Final DataFrame schema:")
+    def insert_intraday_data(self, df: pl.DataFrame):
+        """Insert intraday price data."""
+        if df.is_empty():
+            print("No data to insert")
+            return
+            
+        print(f"Inserting {len(df)} rows with schema:")
         print(df.schema)
         
-        # Create DuckDB table from Polars DataFrame
         try:
-            self.conn.execute("INSERT INTO securities SELECT * FROM df")
-            self.conn.commit()
+            # Start transaction
+            self.conn.execute("BEGIN TRANSACTION")
+            
+            # Delete existing data for all symbols in the dataframe
+            symbols = df.select(pl.col("Symbol").unique()).to_series().to_list()
+            placeholders = ", ".join(["?" for _ in symbols])
+            self.conn.execute(f"DELETE FROM intraday_prices WHERE Symbol IN ({placeholders})", symbols)
+            
+            # Insert new data
+            self.conn.execute("INSERT INTO intraday_prices SELECT * FROM df")
+            
+            # Commit transaction
+            self.conn.execute("COMMIT")
             print(f"Successfully inserted {len(df)} rows")
+            
         except Exception as e:
-            print(f"Error inserting data: {e}")
+            self.conn.execute("ROLLBACK")
+            print(f"Error inserting data: {str(e)}")
             raise

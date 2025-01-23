@@ -1,160 +1,74 @@
-# Energex: Energy Market Analysis Tools
+# Energex
 
-A Python package for downloading, analyzing, and visualizing energy market data using Polars and DuckDB.
+Energy derivatives data collection and analysis system with advanced analytics for futures trading.
 
 ## Features
 
-- Automated data collection from major energy markets
-- Fast data processing using Polars DataFrames
-- Persistent storage in DuckDB with SQL querying capabilities
-- Technical analysis tools including:
-  - Moving averages (20, 50, 200 days)
-  - RSI (Relative Strength Index)
-  - Trading signals (Golden Cross, Death Cross)
-- Interactive visualizations using Plotly
+### Data Collection
+- Real-time intraday data fetching
+- Support for major energy futures contracts
+- Efficient storage using DuckDB
+- Robust error handling and validation
+
+### Analysis Tools
+- Data Quality:
+  - Price gap detection
+  - Volume anomaly detection
+  - OHLC consistency checks
+  
+- Volatility Analysis:
+  - Multiple volatility calculation methods
+  - Intraday pattern detection
+  - Risk metrics
+
+- Futures Analysis:
+  - Term structure analysis
+  - Roll yield calculations
+  - Basis risk measurement
+  - Implied rates
+
+### Visualization
+- Interactive price charts
+- Volume profile analysis
+- Term structure visualization
+- Futures curve analysis
 
 ## Installation
 
 ```bash
-# Install using uv (recommended)
-curl -LsSf https://astral.sh/uv/install.sh | sh
-uv pip install energex
-
-# Or using pip
 pip install energex
 ```
 
 ## Quick Start
 
 ```python
-from energex import TechnicalAnalyzer
+from energex.data_fetcher import EnergyDataFetcher
+from energex.database import EnergyDatabase
+from energex.analysis.volatility import VolatilityAnalyzer
+from energex.visualization.charts import MarketVisualizer
 
-# Initialize analyzer
-analyzer = TechnicalAnalyzer()
+# Fetch data
+fetcher = EnergyDataFetcher()
+data = fetcher.fetch_all_commodities()
 
-# Analyze crude oil futures
-df, signals, fig = analyzer.analyze("CL=F")
+# Store in database
+db = EnergyDatabase()
+db.insert_intraday_data(data)
 
-# Save analysis chart
-fig.write_html("crude_oil_analysis.html")
+# Analyze volatility
+analyzer = VolatilityAnalyzer(data)
+vol_metrics = analyzer.calculate_volatility_metrics()
 
-# Print recent trading signals
-print("Recent Trading Signals:")
-print(signals)
-```
-
-## Project Structure
-
-```
-energex/
-├── src/
-│   ├── energex/
-│   │   ├── __init__.py
-│   │   ├── database.py       # DuckDB interface
-│   │   ├── data_fetcher.py   # Data collection
-│   │   └── analysis.py       # Technical analysis
-│   └── examples/
-│       ├── 01_basic_queries.py
-│       ├── 02_technical_analysis.py
-│       └── 03_spread_analysis.py
-├── tests/                    # Unit and integration tests
-├── pyproject.toml           # Project configuration
-└── README.md
-```
-
-## Basic Usage
-
-### 1. Query Historical Data
-
-```python
-from energex import EnergyQueryTool
-
-# Initialize query tool
-tool = EnergyQueryTool()
-
-# Get latest prices
-prices = tool.get_latest_prices()
-
-# Get daily returns for crude oil
-returns = tool.get_daily_returns("CL=F")
-
-# Analyze trading volume
-volume = tool.get_volume_analysis("NG=F")
-```
-
-### 2. Technical Analysis
-
-```python
-from energex import TechnicalAnalyzer
-
-analyzer = TechnicalAnalyzer()
-
-# Full analysis with visualization
-df, signals, fig = analyzer.analyze("CL=F")
-
-# Access individual components
-df = analyzer.get_data("CL=F")
-df = analyzer.add_moving_averages(df)
-df = analyzer.add_rsi(df)
-```
-
-### 3. Spread Analysis
-
-```python
-from energex import SpreadAnalyzer
-
-analyzer = SpreadAnalyzer()
-
-# Analyze WTI-Brent spread
-spread_data = analyzer.get_spread_data("CL=F", "BZ=F")
-stats = analyzer.calculate_spread_stats(spread_data)
-```
-
-## Configuration
-
-The package uses DuckDB for storage and can be configured through environment variables:
-
-```bash
-ENERGEX_DB_PATH=/path/to/database.db
-ENERGEX_DATA_DIR=/path/to/data
-```
-
-## Development
-
-1. Clone the repository:
-```bash
-git clone https://github.com/oldhero5/energex.git
-cd energex
-```
-
-2. Set up the development environment:
-```bash
-uv venv
-source .venv/bin/activate  # On Windows: .venv\Scripts\activate
-uv pip install -e ".[dev]"
-```
-
-3. Run tests:
-```bash
-pytest tests/
+# Create visualizations
+viz = MarketVisualizer(data)
+fig = viz.plot_price_quality("CL=F")
+fig.show()
 ```
 
 ## Contributing
 
-1. Fork the repository
-2. Create a feature branch
-3. Commit your changes
-4. Push to the branch
-5. Create a Pull Request
+Contributions are welcome! Please read our [Contributing Guidelines](CONTRIBUTING.md) for details.
 
 ## License
 
-This project is licensed under the MIT License - see the LICENSE file for details.
-
-## Acknowledgments
-
-- Data provided by Yahoo Finance
-- Built with:
-  - [Polars](https://pola.rs/)
-  - [DuckDB](https://duckdb.org/)
-  - [Plotly](https://plotly.com/)
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
