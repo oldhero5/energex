@@ -10,4 +10,25 @@ wheels/
 
 # Virtual environments
 .venv
-*.db
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# Logs
+*.log
+logs/
+
+# Cache directories
+.cache/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Coverage reports
+.coverage
+htmlcov/
+coverage.xml
+
+CLAUDE.md
