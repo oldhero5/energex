@@ -69,10 +69,11 @@ from energex import EnergyDatabase, EnergyDataFetcher, VolatilityAnalyzer
 
 # Initialize database and fetcher
 db = EnergyDatabase()
-fetcher = EnergyDataFetcher(db)
+fetcher = EnergyDataFetcher()
 
 # Fetch and store data
-fetcher.fetch_and_store(['CL=F', 'NG=F'])
+data = fetcher.fetch_all_commodities()
+db.insert_intraday_data(data)
 
 # Query and analyze
 query = "SELECT * FROM intraday_prices WHERE Symbol = 'CL=F'"

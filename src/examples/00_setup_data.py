@@ -15,14 +15,14 @@ print("=" * 70)
 print("ENERGEX - Data Setup for Examples")
 print("=" * 70)
 
-# Initialize database and fetcher
+# Initialize database
 print("\n[1/3] Initializing database...")
 db = EnergyDatabase()
 print(f"✅ Database: {db.db_path}")
 
 # Initialize fetcher
 print("\n[2/3] Initializing data fetcher...")
-fetcher = EnergyDataFetcher(db)
+fetcher = EnergyDataFetcher()
 print("✅ Data fetcher ready")
 
 # Fetch data for all energy symbols
@@ -33,8 +33,18 @@ print("  - BZ=F (Brent Crude)")
 print("  - NG=F (Natural Gas)")
 
 try:
-    fetcher.fetch_and_store(['CL=F', 'BZ=F', 'NG=F'])
-    print("\n✅ Data fetch complete!")
+    # Fetch all commodity data
+    data = fetcher.fetch_all_commodities()
+
+    if data.is_empty():
+        print("\n❌ No data fetched!")
+        print("This can happen during market hours or weekends.")
+        print("Try running during US market hours (9:30 AM - 4:00 PM ET).")
+        exit(1)
+
+    # Insert into database
+    db.insert_intraday_data(data)
+    print("\n✅ Data fetch and storage complete!")
 
     # Verify data
     query = "SELECT Symbol, COUNT(*) as count, MIN(Datetime) as first, MAX(Datetime) as last FROM intraday_prices GROUP BY Symbol"
@@ -57,4 +67,5 @@ except Exception as e:
     print("\nTroubleshooting:")
     print("  - Check your internet connection")
     print("  - Verify yfinance is installed: pip install yfinance")
-    print("  - Try running again in a few minutes")
+    print("  - Try running during market hours")
+    print("  - Markets may be closed (weekends/holidays)")
