@@ -23,15 +23,37 @@ This directory contains comprehensive examples demonstrating all features of ene
 
 **Before running any examples, populate the database:**
 
+#### Option 1: Real-time Intraday Data (Markets Open)
+
 ```bash
 python src/examples/00_setup_data.py
 ```
 
 This script will:
 - Initialize the DuckDB database
-- Fetch recent market data for CL=F, BZ=F, NG=F
+- Fetch recent 1-minute intraday market data for CL=F, BZ=F, NG=F
 - Verify data integrity
 - Take 2-3 minutes to complete
+
+**Requirements:** Markets must be open (Sunday 6pm - Friday 5pm ET, excluding holidays)
+
+#### Option 2: Historical Daily Data (Markets Closed) ⭐ Use This on Holidays
+
+```bash
+python src/examples/00_setup_data_historical.py
+```
+
+**Use this version when:**
+- Markets are closed (weekends, Christmas, New Year's, etc.)
+- Testing examples outside trading hours
+- You need sample data immediately
+
+This script will:
+- Fetch the last 30 days of daily OHLCV data
+- Works anytime, regardless of market status
+- Perfect for testing and learning
+
+**Note:** Examples will work with daily data, but analysis results will differ from real-time intraday usage
 
 Expected output:
 ```
@@ -280,9 +302,20 @@ analyzer = MarketSentimentAnalyzer(df, provider='ollama')
 
 ## Troubleshooting
 
+### "No data fetched" or "Markets are closed"
+
+**Problem:** Running `00_setup_data.py` on Christmas, weekends, or market holidays
+
+**Solution:** Use the historical data script instead:
+```bash
+python src/examples/00_setup_data_historical.py
+```
+
+This fetches daily historical data that works anytime, regardless of market status.
+
 ### "No data found in database"
 
-**Solution:** Run `00_setup_data.py` first
+**Solution:** Run `00_setup_data.py` (or `00_setup_data_historical.py`) first
 
 ### "Sentiment analysis not available"
 

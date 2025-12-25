@@ -38,8 +38,16 @@ try:
 
     if data.is_empty():
         print("\n❌ No data fetched!")
-        print("This can happen during market hours or weekends.")
-        print("Try running during US market hours (9:30 AM - 4:00 PM ET).")
+        print("\nThis happens when markets are closed or data is unavailable.")
+        print("\nCommon reasons:")
+        print("  - Markets are closed (weekends, holidays, after hours)")
+        print("  - US energy futures trade: Sunday 6pm - Friday 5pm ET (with daily breaks)")
+        print("  - Major holidays: Christmas, New Year's, Thanksgiving, etc.")
+        print("  - Yahoo Finance API may be experiencing issues")
+        print("\nSolutions:")
+        print("  - Wait for markets to open (check https://www.cmegroup.com/tools-information/holiday-calendar.html)")
+        print("  - Try again during active trading hours")
+        print("  - If urgent, use historical data by modifying the time window in data_fetcher.py")
         exit(1)
 
     # Insert into database
@@ -67,5 +75,6 @@ except Exception as e:
     print("\nTroubleshooting:")
     print("  - Check your internet connection")
     print("  - Verify yfinance is installed: pip install yfinance")
-    print("  - Try running during market hours")
-    print("  - Markets may be closed (weekends/holidays)")
+    print("  - Markets may be closed (check CME Group holiday calendar)")
+    print("  - Try again during US trading hours: Sunday 6pm - Friday 5pm ET")
+    print("  - If this persists during market hours, Yahoo Finance API may have issues")

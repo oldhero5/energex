@@ -72,7 +72,7 @@ class EnergyDataFetcher:
     def fetch_all_commodities(self) -> pl.DataFrame:
         """Fetch and combine data for all commodities."""
         dfs = []
-        
+
         for commodity in self.ENERGY_SYMBOLS:
             try:
                 df = self.get_commodity_data(commodity)
@@ -80,13 +80,13 @@ class EnergyDataFetcher:
                     dfs.append(df)
             except Exception as e:
                 print(f"Error processing {commodity}: {str(e)}")
-        
+
         if not dfs:
             return pl.DataFrame()
-            
+
         # Combine all dataframes
         combined_data = pl.concat(dfs)
-        
+
         # Clean and organize final dataset
         final_data = (
             combined_data
@@ -101,12 +101,5 @@ class EnergyDataFetcher:
                 'Volume'
             ])
         )
-        
-        return final_data
 
-    def fetch_all_commodities(self) -> dict[str, pl.DataFrame]:
-        """Fetch intraday data for all commodity symbols."""
-        return {
-            symbol: self.get_commodity_data(symbol)
-            for symbol in self.ENERGY_SYMBOLS.keys()
-        }
+        return final_data
