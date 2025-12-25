@@ -1,6 +1,6 @@
 [project]
 name = "energex"
-version = "0.2.0"
+version = "0.3.0"
 description = "Energy derivatives data collection and analysis system"
 authors = [
     {name = "Marty H", email = "oldhero5@proton.me"}
