@@ -1,0 +1,36 @@
+services:
+  energex:
+    build: .
+    image: ghcr.io/oldhero5/energex:local
+    container_name: energex
+    init: true                       # forward signals / reap zombies
+    restart: unless-stopped          # recovers on crash and when OrbStack starts
+    stop_grace_period: 30s           # let lifespan stop the scheduler + close the DB
+    env_file:
+      - .env                         # secrets/config at runtime, NOT baked into the image
+    environment:
+      ENERGEX_DB_PATH: /data/energy.db
+      TZ: America/Chicago
+      LOG_LEVEL: INFO
+      ENERGEX_INGEST_CRON: "*/5 * * * *"
+    ports:
+      - "8000:8000"
+    volumes:
+      - energex-data:/data          # NAMED volume (native ext4) -> durable DB + reliable locking
+      - ./backups:/backups          # bind mount for EXPORT DATABASE snapshots (visible on the Mac)
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8000/healthz').status==200 else 1)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
+
+volumes:
+  energex-data:                      # survives `compose down` / OrbStack restart (only `down -v` deletes it)
+# OrbStack notes: enable "Start at login" and prevent Mac sleep (caffeinate / stay plugged in) for true 24/7.
+# Do NOT put energy.db on a macOS bind mount — VirtioFS breaks DuckDB advisory locks/fsync (DuckDB#13017).
