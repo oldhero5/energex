@@ -1,5 +1,6 @@
 # src/energex/visualization/charts.py
 
+import numpy as np
 import plotly.graph_objects as go
 import polars as pl
 from plotly.subplots import make_subplots
@@ -26,7 +27,7 @@ class MarketVisualizer:
 
         # Price chart with gaps highlighted
         fig.add_trace(
-            go.Scatter(x=df["Datetime"], y=df["Close"], name="Price", line=dict(color="blue")),
+            go.Scatter(x=df["Datetime"], y=df["Close"], name="Price", line={"color": "blue"}),
             row=1,
             col=1,
         )
@@ -57,9 +58,11 @@ class MarketVisualizer:
                 y=price_changes["price_change"],
                 name="Price Changes",
                 mode="lines+markers",
-                marker=dict(
-                    color=price_changes["price_change"].abs(), colorscale="RdYlBu", showscale=True
-                ),
+                marker={
+                    "color": price_changes["price_change"].abs(),
+                    "colorscale": "RdYlBu",
+                    "showscale": True,
+                },
             ),
             row=3,
             col=1,
@@ -127,7 +130,8 @@ class MarketVisualizer:
         fig.add_trace(
             go.Histogram(
                 y=df["Close"],
-                weights=df["Volume"],
+                x=df["Volume"],
+                histfunc="sum",
                 nbinsy=50,
                 name="Volume Profile",
                 orientation="h",
@@ -205,11 +209,11 @@ class MarketVisualizer:
                 x=latest["expiry"],
                 y=latest["Close"],
                 mode="markers",
-                marker=dict(
-                    size=latest["Volume"],
-                    sizeref=2.0 * max(latest["Volume"]) / (40.0**2),
-                    sizemin=4,
-                ),
+                marker={
+                    "size": latest["Volume"],
+                    "sizeref": 2.0 * max(latest["Volume"]) / (40.0**2),
+                    "sizemin": 4,
+                },
                 name="Volume",
             )
         )
