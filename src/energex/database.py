@@ -1,10 +1,13 @@
 # src/energex/database.py
+import logging
 from pathlib import Path
 
 import duckdb
 import polars as pl
 
 from energex.exceptions import DatabaseError
+
+logger = logging.getLogger(__name__)
 
 
 class EnergyDatabase:
@@ -98,7 +101,7 @@ class EnergyDatabase:
     def insert_intraday_data(self, df: pl.DataFrame) -> None:
         """Idempotently upsert intraday OHLCV rows keyed by (Symbol, Datetime)."""
         if df.is_empty():
-            print("No data to insert")
+            logger.info("No data to insert")
             return
 
         missing = [c for c in self.COLUMNS if c not in df.columns]
@@ -125,8 +128,8 @@ class EnergyDatabase:
                     Volume = excluded.Volume
             """)
             self.conn.execute("COMMIT")
-            print(f"Upserted {len(df)} rows")
+            logger.info("Upserted %d rows", len(df))
         except Exception as e:
             self.conn.execute("ROLLBACK")
-            print(f"Error inserting data: {e}")
+            logger.error("Error inserting data: %s", e)
             raise
