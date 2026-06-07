@@ -51,8 +51,9 @@ class EnergyDatabase:
             
             # Delete existing data for all symbols in the dataframe
             symbols = df.select(pl.col("Symbol").unique()).to_series().to_list()
+            # Safe: building placeholders (not values) for parameterized query
             placeholders = ", ".join(["?" for _ in symbols])
-            self.conn.execute(f"DELETE FROM intraday_prices WHERE Symbol IN ({placeholders})", symbols)
+            self.conn.execute(f"DELETE FROM intraday_prices WHERE Symbol IN ({placeholders})", symbols)  # nosec B608
             
             # Insert new data
             self.conn.execute("INSERT INTO intraday_prices SELECT * FROM df")
