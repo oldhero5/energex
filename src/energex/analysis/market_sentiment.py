@@ -9,7 +9,7 @@ import polars as pl
 from energex.config import get_settings
 from energex.exceptions import AnalysisError, LLMProviderError
 from energex.llm_providers import BaseLLMProvider, LLMProviderFactory
-from energex.news_fetcher import NewsAPISource, NewsFetcher, RSSNewsSource
+from energex.news_fetcher import NewsAPISource, NewsFetcher, NewsSource, RSSNewsSource
 
 
 class MarketSentimentAnalyzer:
@@ -54,10 +54,11 @@ class MarketSentimentAnalyzer:
         # Initialize LLM provider
         try:
             provider_name = provider or self.settings.llm.provider
+            llm_key = self.settings.llm.api_key
             self.llm: BaseLLMProvider = LLMProviderFactory.create(
                 provider=provider_name,
                 model=self.settings.llm.model,
-                api_key=self.settings.llm.api_key,
+                api_key=llm_key.get_secret_value() if llm_key else None,
                 base_url=self.settings.llm.base_url,
             )
 
@@ -71,9 +72,10 @@ class MarketSentimentAnalyzer:
             self.llm = None  # type: ignore
 
         # Initialize news fetcher
-        news_sources = [RSSNewsSource()]
-        if self.settings.news.news_api_key:
-            news_sources.append(NewsAPISource(api_key=self.settings.news.news_api_key))
+        news_sources: list[NewsSource] = [RSSNewsSource()]
+        news_key = self.settings.news.news_api_key
+        if news_key is not None:
+            news_sources.append(NewsAPISource(api_key=news_key.get_secret_value()))
 
         self.news_fetcher = NewsFetcher(news_sources)
 

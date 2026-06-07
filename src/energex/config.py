@@ -3,7 +3,7 @@
 from pathlib import Path
 from typing import Literal
 
-from pydantic import Field, field_validator
+from pydantic import Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from energex.exceptions import ConfigurationError
@@ -16,32 +16,34 @@ class LLMConfig(BaseSettings):
         default="openai", description="LLM provider to use"
     )
     model: str = Field(default="gpt-4", description="Model name for the chosen provider")
-    api_key: str | None = Field(default=None, description="API key for the LLM provider")
+    api_key: SecretStr | None = Field(default=None, description="API key for the LLM provider")
     base_url: str | None = Field(default=None, description="Base URL for local LLM (Ollama)")
     requests_per_minute: int = Field(
         default=10, description="Maximum API requests per minute", gt=0
     )
     cache_ttl: int = Field(default=3600, description="Cache TTL for LLM responses in seconds", ge=0)
 
-    model_config = SettingsConfigDict(env_prefix="", case_sensitive=False)
-
-    @field_validator("provider")
-    @classmethod
-    def validate_provider(cls, v: str) -> str:
-        """Validate LLM provider choice."""
-        valid_providers = ["openai", "anthropic", "ollama"]
-        if v not in valid_providers:
-            raise ConfigurationError(f"Invalid LLM provider: {v}. Must be one of {valid_providers}")
-        return v
+    # Distinct prefix (was env_prefix="" which bound bare API_KEY/MODEL/BASE_URL and
+    # leaked foreign env vars into this config). validate_assignment re-checks overrides
+    # applied by EnergexSettings.model_post_init (e.g. an invalid provider).
+    model_config = SettingsConfigDict(
+        env_prefix="LLM_", case_sensitive=False, validate_assignment=True
+    )
 
 
 class NewsConfig(BaseSettings):
     """News API configuration."""
 
-    news_api_key: str | None = Field(default=None, description="NewsAPI.org API key")
-    alpha_vantage_key: str | None = Field(default=None, description="Alpha Vantage API key")
+    news_api_key: SecretStr | None = Field(
+        default=None, description="NewsAPI.org API key (env: NEWS_API_KEY)"
+    )
+    alpha_vantage_key: SecretStr | None = Field(
+        default=None, description="Alpha Vantage API key (env: ALPHA_VANTAGE_KEY)"
+    )
 
-    model_config = SettingsConfigDict(env_prefix="NEWS_", case_sensitive=False)
+    # env_prefix="" with descriptive field names gives the intuitive NEWS_API_KEY /
+    # ALPHA_VANTAGE_KEY (the previous NEWS_ prefix required NEWS_NEWS_API_KEY).
+    model_config = SettingsConfigDict(env_prefix="", case_sensitive=False)
 
 
 class DatabaseConfig(BaseSettings):
@@ -118,8 +120,8 @@ class EnergexSettings(BaseSettings):
     default_llm_model: str | None = Field(
         default=None, description="Override for default LLM model"
     )
-    openai_api_key: str | None = Field(default=None, description="OpenAI API key")
-    anthropic_api_key: str | None = Field(default=None, description="Anthropic API key")
+    openai_api_key: SecretStr | None = Field(default=None, description="OpenAI API key")
+    anthropic_api_key: SecretStr | None = Field(default=None, description="Anthropic API key")
     ollama_base_url: str | None = Field(default=None, description="Ollama base URL")
     llm_requests_per_minute: int | None = Field(default=None, description="LLM requests per minute")
     llm_cache_ttl_seconds: int | None = Field(default=None, description="LLM cache TTL")
@@ -129,23 +131,22 @@ class EnergexSettings(BaseSettings):
     )
 
     def model_post_init(self, __context: object) -> None:
-        """Apply overrides after initialization."""
-        # Apply top-level overrides to LLM config
-        if self.default_llm_provider:
-            self.llm.provider = self.default_llm_provider  # type: ignore
-        if self.default_llm_model:
+        """Apply top-level overrides to the LLM sub-config (validated on assignment)."""
+        if self.default_llm_provider is not None:
+            self.llm.provider = self.default_llm_provider  # type: ignore[assignment]
+        if self.default_llm_model is not None:
             self.llm.model = self.default_llm_model
-        if self.llm_requests_per_minute:
+        if self.llm_requests_per_minute is not None:
             self.llm.requests_per_minute = self.llm_requests_per_minute
-        if self.llm_cache_ttl_seconds:
+        if self.llm_cache_ttl_seconds is not None:
             self.llm.cache_ttl = self.llm_cache_ttl_seconds
 
-        # Set API key based on provider
-        if self.llm.provider == "openai" and self.openai_api_key:
+        # Set the API key / base URL for the active provider.
+        if self.llm.provider == "openai" and self.openai_api_key is not None:
             self.llm.api_key = self.openai_api_key
-        elif self.llm.provider == "anthropic" and self.anthropic_api_key:
+        elif self.llm.provider == "anthropic" and self.anthropic_api_key is not None:
             self.llm.api_key = self.anthropic_api_key
-        elif self.llm.provider == "ollama" and self.ollama_base_url:
+        elif self.llm.provider == "ollama" and self.ollama_base_url is not None:
             self.llm.base_url = self.ollama_base_url
 
 
