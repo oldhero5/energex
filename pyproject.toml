@@ -80,8 +80,6 @@ ignore = ["E501"]
 "src/energex/main.py" = ["T201"]
 "src/energex/data_fetcher.py" = ["T201"]
 "src/energex/database.py" = ["T201"]  # print() -> structured logging pending (R10)
-# numpy import + dict()->literal cleanup land with the charts fix (R3).
-"src/energex/visualization/charts.py" = ["F821", "C408"]
 
 [tool.black]
 line-length = 100
