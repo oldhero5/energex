@@ -84,9 +84,9 @@ class DataFetchConfig(BaseSettings):
     """Data fetching configuration."""
 
     yfinance_timeout: int = Field(default=30, description="Yahoo Finance timeout in seconds")
-    data_fetch_retries: int = Field(default=3, description="Number of retry attempts", ge=0)
+    data_fetch_retries: int = Field(default=3, description="Number of download attempts", ge=0)
 
-    model_config = SettingsConfigDict(case_sensitive=False)
+    model_config = SettingsConfigDict(env_prefix="DATAFETCH_", case_sensitive=False)
 
 
 class AnalysisConfig(BaseSettings):

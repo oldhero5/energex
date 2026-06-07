@@ -1,9 +1,17 @@
 # src/energex/data_fetcher.py
+import logging
+import time
 from datetime import datetime, timedelta
+from typing import Any
 
 import polars as pl
 import pytz
 import yfinance as yf
+
+from energex.config import get_settings
+from energex.exceptions import DataFetchError
+
+logger = logging.getLogger(__name__)
 
 
 def normalize_datetime_to_utc(df: pl.DataFrame) -> pl.DataFrame:
@@ -29,71 +37,79 @@ class EnergyDataFetcher:
     }
 
     def __init__(self) -> None:
-        # Initialize with UTC timezone
+        settings = get_settings()
+        self.timeout = settings.data_fetch.yfinance_timeout
+        self.retries = max(1, settings.data_fetch.data_fetch_retries)
         self.end_time = datetime.now(pytz.UTC)
         self.start_time = self.end_time - timedelta(days=1)
 
+    def _download_with_retry(self, ticker: str) -> Any:
+        """Download with a timeout and exponential backoff; raise on real failure."""
+        last_exc: Exception | None = None
+        for attempt in range(1, self.retries + 1):
+            try:
+                return yf.download(
+                    ticker,
+                    start=self.start_time,
+                    end=self.end_time,
+                    interval="1m",
+                    timeout=self.timeout,
+                )
+            except Exception as e:
+                last_exc = e
+                logger.warning(
+                    "Download attempt %d/%d for %s failed: %s", attempt, self.retries, ticker, e
+                )
+                if attempt < self.retries:
+                    time.sleep(min(2 ** (attempt - 1), 10))
+        raise DataFetchError(
+            f"Failed to download {ticker} after {self.retries} attempts"
+        ) from last_exc
+
     def get_commodity_data(self, commodity: str) -> pl.DataFrame:
-        """
-        Fetch intraday commodity data.
-        Args:
-            commodity: The commodity key (crude, brent, gas)
-        Returns:
-            Polars DataFrame with standardized columns
+        """Fetch intraday data for one commodity key (crude, brent, gas).
+
+        Returns an empty DataFrame only for a genuinely empty result; a real download
+        failure raises DataFetchError so callers can distinguish an outage from a
+        quiet (weekend/holiday) market.
         """
         ticker = self.ENERGY_SYMBOLS[commodity]["ticker"]
-        print(f"Downloading {commodity} ({ticker}) data...")
+        logger.info("Downloading %s (%s)", commodity, ticker)
 
-        try:
-            # Download data using the actual ticker symbol
-            data = yf.download(ticker, start=self.start_time, end=self.end_time, interval="1m")
-
-            if data.empty:
-                print(f"No data returned for {commodity} ({ticker})")
-                return pl.DataFrame()
-
-            # Reset index and handle multi-index columns
-            df = data.reset_index()
-            df.columns = [col[0] if isinstance(col, tuple) else col for col in df.columns]
-
-            # Convert to Polars DataFrame and add symbol
-            df = pl.from_pandas(df)
-            df = df.with_columns(pl.lit(ticker).alias("Symbol"))
-
-            # Sort, select canonical columns, and normalize timestamps to UTC.
-            df = df.sort(["Symbol", "Datetime"]).select(
-                ["Datetime", "Symbol", "Open", "High", "Low", "Close", "Volume"]
-            )
-            df = normalize_datetime_to_utc(df)
-
-            print(f"Got {len(df)} rows for {commodity} ({ticker})")
-            return df
-
-        except Exception as e:
-            print(f"Error downloading {commodity} ({ticker}): {str(e)}")
+        data = self._download_with_retry(ticker)
+        if data.empty:
+            logger.warning("No data returned for %s (%s)", commodity, ticker)
             return pl.DataFrame()
 
-    def fetch_all_commodities(self) -> pl.DataFrame:
-        """Fetch and combine data for all commodities."""
-        dfs = []
+        # Reset index and flatten any multi-index columns.
+        df = data.reset_index()
+        df.columns = [col[0] if isinstance(col, tuple) else col for col in df.columns]
 
+        df = pl.from_pandas(df).with_columns(pl.lit(ticker).alias("Symbol"))
+        df = df.sort(["Symbol", "Datetime"]).select(
+            ["Datetime", "Symbol", "Open", "High", "Low", "Close", "Volume"]
+        )
+        df = normalize_datetime_to_utc(df)
+
+        logger.info("Got %d rows for %s (%s)", len(df), commodity, ticker)
+        return df
+
+    def fetch_all_commodities(self) -> pl.DataFrame:
+        """Fetch and combine all commodities; a failed symbol is logged and skipped."""
+        dfs = []
         for commodity in self.ENERGY_SYMBOLS:
             try:
                 df = self.get_commodity_data(commodity)
                 if not df.is_empty():
                     dfs.append(df)
-            except Exception as e:
-                print(f"Error processing {commodity}: {str(e)}")
+            except DataFetchError as e:
+                logger.error("Failed to fetch %s: %s", commodity, e)
+                continue
 
         if not dfs:
             return pl.DataFrame()
 
-        # Combine all dataframes
-        combined_data = pl.concat(dfs)
-
-        # Clean and organize final dataset
-        final_data = combined_data.sort(["Symbol", "Datetime"]).select(
+        combined = pl.concat(dfs)
+        return combined.sort(["Symbol", "Datetime"]).select(
             ["Datetime", "Symbol", "Open", "High", "Low", "Close", "Volume"]
         )
-
-        return final_data

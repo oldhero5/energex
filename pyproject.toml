@@ -75,11 +75,6 @@ ignore = ["E501"]
 "__init__.py" = ["F401"]
 "**/examples/*.py" = ["T201", "C408"]  # Allow print() and dict() in examples
 "**/test_*.py" = ["T201"]  # Allow print() in test files
-# --- TEMPORARY ignores, removed by the remediation PRs in ASSESSMENT.md ---
-# print() -> structured logging (R10): removed when logging is wired in.
-"src/energex/main.py" = ["T201"]
-"src/energex/data_fetcher.py" = ["T201"]
-"src/energex/database.py" = ["T201"]  # print() -> structured logging pending (R10)
 
 [tool.black]
 line-length = 100
