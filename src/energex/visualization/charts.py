@@ -188,42 +188,8 @@ class MarketVisualizer:
         return fig
 
     def plot_futures_curve(self, symbols: list[str]) -> go.Figure:
-        """
-        Create futures curve visualization.
-        """
-        # Get latest prices for all contracts
-        latest = self.df.filter(pl.col("Symbol").is_in(symbols)).group_by("Symbol").tail(1)
-
-        fig = go.Figure()
-
-        # Plot current curve
-        fig.add_trace(
-            go.Scatter(
-                x=latest["expiry"], y=latest["Close"], mode="lines+markers", name="Futures Curve"
-            )
+        """Plot the futures curve by expiry — gated until the contract-month data
+        model exists (this needs an 'expiry' column the schema does not have; R8)."""
+        raise NotImplementedError(
+            "plot_futures_curve requires a contract-month/expiry data model (see ASSESSMENT.md R8)."
         )
-
-        # Add volume bubbles
-        fig.add_trace(
-            go.Scatter(
-                x=latest["expiry"],
-                y=latest["Close"],
-                mode="markers",
-                marker={
-                    "size": latest["Volume"],
-                    "sizeref": 2.0 * max(latest["Volume"]) / (40.0**2),
-                    "sizemin": 4,
-                },
-                name="Volume",
-            )
-        )
-
-        fig.update_layout(
-            title="Futures Curve Analysis",
-            xaxis_title="Expiry",
-            yaxis_title="Price",
-            height=600,
-            showlegend=True,
-        )
-
-        return fig
