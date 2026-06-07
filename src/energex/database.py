@@ -1,10 +1,13 @@
 # src/energex/database.py
 import logging
 from pathlib import Path
+from types import TracebackType
+from typing import Any
 
 import duckdb
 import polars as pl
 
+from energex.config import get_settings
 from energex.exceptions import DatabaseError
 
 logger = logging.getLogger(__name__)
@@ -21,9 +24,13 @@ class EnergyDatabase:
     #: Canonical column order for the ``intraday_prices`` table.
     COLUMNS = ("Datetime", "Symbol", "Open", "High", "Low", "Close", "Volume")
 
-    def __init__(self, db_path: str = "energy.db", read_only: bool = False):
+    def __init__(self, db_path: str | None = None, read_only: bool = False):
+        # Resolve the path from configuration (ENERGEX_DB_PATH) when not given.
+        if db_path is None:
+            db_path = str(get_settings().database.db_path)
         self.db_path = Path(db_path)
         self.read_only = read_only
+        self._closed = False
         if read_only and not self.db_path.exists():
             raise DatabaseError(
                 f"Cannot open database read-only; file does not exist: {self.db_path}"
@@ -133,3 +140,26 @@ class EnergyDatabase:
             self.conn.execute("ROLLBACK")
             logger.error("Error inserting data: %s", e)
             raise
+
+    def query(self, sql: str, params: list[Any] | None = None) -> pl.DataFrame:
+        """Run a read query on a separate cursor and return a Polars DataFrame."""
+        result = pl.from_arrow(self.conn.cursor().execute(sql, params or []).arrow())
+        assert isinstance(result, pl.DataFrame)
+        return result
+
+    def close(self) -> None:
+        """Close the underlying DuckDB connection (idempotent)."""
+        if not self._closed:
+            self.conn.close()
+            self._closed = True
+
+    def __enter__(self) -> "EnergyDatabase":
+        return self
+
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc: BaseException | None,
+        tb: TracebackType | None,
+    ) -> None:
+        self.close()
