@@ -227,9 +227,10 @@ Only output valid JSON, nothing else."""
                 self._sentiment_cache[cache_key] = result
                 return result
 
-            except (json.JSONDecodeError, LLMProviderError) as e:
+            except (json.JSONDecodeError, LLMProviderError, TypeError, ValueError, KeyError) as e:
+                # A malformed field (e.g. a quoted number) must not abort the whole
+                # batch — degrade to the rule-based fallback for this one article.
                 self.logger.warning(f"LLM analysis failed for '{title}': {e}")
-                # Fall through to rule-based fallback
 
         # Fallback: simple rule-based sentiment
         result = self._rule_based_sentiment(title, summary)
@@ -303,6 +304,18 @@ Only output valid JSON, nothing else."""
             "key_factors": ["Rule-based analysis"],
         }
 
+    @staticmethod
+    def _coerce_utc(df: pl.DataFrame) -> pl.DataFrame:
+        """Make the Datetime column tz-aware UTC so price/news joins never mix tzs."""
+        if "Datetime" not in df.columns:
+            return df
+        dtype = df.schema["Datetime"]
+        if isinstance(dtype, pl.Datetime):
+            if dtype.time_zone is None:
+                return df.with_columns(pl.col("Datetime").dt.replace_time_zone("UTC"))
+            return df.with_columns(pl.col("Datetime").dt.convert_time_zone("UTC"))
+        return df
+
     def add_sentiment_to_prices(
         self,
         sentiment_df: pl.DataFrame,
@@ -337,13 +350,23 @@ Only output valid JSON, nothing else."""
                 ]
             )
 
-        # Aggregate sentiment by Symbol and time window
+        # Align timezones: price and news timestamps must share one tz for join_asof.
+        price_df = self._coerce_utc(self.df)
+        sentiment_df = self._coerce_utc(sentiment_df)
+
+        # Label each window at its END so a backward asof-join can only attach a
+        # window's sentiment to bars at/after the window closes — news published
+        # mid-window never leaks onto an earlier bar (look-ahead bias).
+        windowed = sentiment_df.with_columns(
+            pl.col("Datetime")
+            .dt.truncate(time_window)
+            .dt.offset_by(time_window)
+            .alias("time_window")
+        )
+
         if aggregation == "mean":
             agg_sentiment = (
-                sentiment_df.with_columns(
-                    [pl.col("Datetime").dt.truncate(time_window).alias("time_window")]
-                )
-                .group_by(["Symbol", "time_window"])
+                windowed.group_by(["Symbol", "time_window"])
                 .agg(
                     [
                         pl.col("sentiment_score").mean().alias("avg_sentiment"),
@@ -354,17 +377,17 @@ Only output valid JSON, nothing else."""
                 .rename({"time_window": "Datetime"})
             )
         elif aggregation == "weighted":
-            # Weighted average: (sentiment * confidence).sum() / confidence.sum()
+            # Confidence-weighted average, guarded against a zero-confidence window.
             agg_sentiment = (
-                sentiment_df.with_columns(
-                    [pl.col("Datetime").dt.truncate(time_window).alias("time_window")]
-                )
-                .group_by(["Symbol", "time_window"])
+                windowed.group_by(["Symbol", "time_window"])
                 .agg(
                     [
-                        (pl.col("sentiment_score") * pl.col("confidence"))
-                        .sum()
-                        .truediv(pl.col("confidence").sum())
+                        pl.when(pl.col("confidence").sum() != 0)
+                        .then(
+                            (pl.col("sentiment_score") * pl.col("confidence")).sum()
+                            / pl.col("confidence").sum()
+                        )
+                        .otherwise(pl.col("sentiment_score").mean())
                         .alias("avg_sentiment"),
                         pl.col("confidence").mean().alias("avg_confidence"),
                         pl.col("news_title").count().alias("news_count"),
@@ -374,8 +397,7 @@ Only output valid JSON, nothing else."""
             )
         else:  # latest
             agg_sentiment = (
-                sentiment_df.sort("Datetime", descending=True)
-                .with_columns([pl.col("Datetime").dt.truncate(time_window).alias("time_window")])
+                windowed.sort("Datetime", descending=True)
                 .group_by(["Symbol", "time_window"])
                 .agg(
                     [
@@ -387,9 +409,9 @@ Only output valid JSON, nothing else."""
                 .rename({"time_window": "Datetime"})
             )
 
-        # Join with price data using asof join (backward fill)
+        # Join with price data using a backward asof-join.
         result = (
-            self.df.sort(["Symbol", "Datetime"])
+            price_df.sort(["Symbol", "Datetime"])
             .join_asof(
                 agg_sentiment.sort(["Symbol", "Datetime"]),
                 on="Datetime",
