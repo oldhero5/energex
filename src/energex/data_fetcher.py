@@ -6,6 +6,21 @@ import pytz
 import yfinance as yf
 
 
+def normalize_datetime_to_utc(df: pl.DataFrame) -> pl.DataFrame:
+    """Convert a tz-aware Datetime column to a UTC instant.
+
+    yfinance returns exchange-tz-aware bars; storing them as a single UTC instant makes
+    the (Symbol, Datetime) key host-independent. Naive or absent columns are returned
+    unchanged (the storage layer interprets naive timestamps as UTC).
+    """
+    if df.is_empty() or "Datetime" not in df.columns:
+        return df
+    dtype = df.schema["Datetime"]
+    if isinstance(dtype, pl.Datetime) and dtype.time_zone is not None:
+        return df.with_columns(pl.col("Datetime").dt.convert_time_zone("UTC"))
+    return df
+
+
 class EnergyDataFetcher:
     ENERGY_SYMBOLS = {
         "crude": {"ticker": "CL=F", "name": "Crude Oil Futures"},
@@ -13,7 +28,7 @@ class EnergyDataFetcher:
         "gas": {"ticker": "NG=F", "name": "Natural Gas Futures"},
     }
 
-    def __init__(self):
+    def __init__(self) -> None:
         # Initialize with UTC timezone
         self.end_time = datetime.now(pytz.UTC)
         self.start_time = self.end_time - timedelta(days=1)
@@ -45,10 +60,11 @@ class EnergyDataFetcher:
             df = pl.from_pandas(df)
             df = df.with_columns(pl.lit(ticker).alias("Symbol"))
 
-            # Sort and select columns in specific order
+            # Sort, select canonical columns, and normalize timestamps to UTC.
             df = df.sort(["Symbol", "Datetime"]).select(
                 ["Datetime", "Symbol", "Open", "High", "Low", "Close", "Volume"]
             )
+            df = normalize_datetime_to_utc(df)
 
             print(f"Got {len(df)} rows for {commodity} ({ticker})")
             return df

@@ -26,16 +26,19 @@ class EnergyDatabase:
                 f"Cannot open database read-only; file does not exist: {self.db_path}"
             )
         self.conn = duckdb.connect(str(self.db_path), read_only=read_only)
+        # Store and display timestamps as UTC instants regardless of the host timezone.
+        self.conn.execute("SET TimeZone = 'UTC'")
         # Schema creation is DDL and cannot run on a read-only connection; callers
         # that only inspect/read (e.g. `main --check`) pass read_only=True.
         if not read_only:
             self._init_tables()
+            self._migrate_to_timestamptz()
 
     def _init_tables(self) -> None:
         """Create the intraday_prices table if it does not already exist (idempotent)."""
         self.conn.execute("""
             CREATE TABLE IF NOT EXISTS intraday_prices (
-                Datetime TIMESTAMP,
+                Datetime TIMESTAMPTZ,
                 Symbol VARCHAR,
                 Open DOUBLE,
                 High DOUBLE,
@@ -45,6 +48,45 @@ class EnergyDatabase:
                 CONSTRAINT pk_intraday PRIMARY KEY (Symbol, Datetime)
             )
         """)
+
+    def _migrate_to_timestamptz(self) -> None:
+        """Migrate a legacy naive-TIMESTAMP Datetime column to TIMESTAMPTZ (UTC).
+
+        Pre-R5 databases stored Datetime as a host-tz-dependent naive TIMESTAMP. Treat
+        those existing values as UTC and recreate-and-swap into a TIMESTAMPTZ column.
+        """
+        row = self.conn.execute(
+            "SELECT data_type FROM information_schema.columns "
+            "WHERE table_name = 'intraday_prices' AND column_name = 'Datetime'"
+        ).fetchone()
+        if not row or "TIME ZONE" in row[0]:
+            return  # already TIMESTAMPTZ (or no table)
+
+        self.conn.execute("BEGIN TRANSACTION")
+        try:
+            self.conn.execute("""
+                CREATE TABLE intraday_prices_tz (
+                    Datetime TIMESTAMPTZ,
+                    Symbol VARCHAR,
+                    Open DOUBLE,
+                    High DOUBLE,
+                    Low DOUBLE,
+                    Close DOUBLE,
+                    Volume BIGINT,
+                    CONSTRAINT pk_intraday PRIMARY KEY (Symbol, Datetime)
+                )
+            """)
+            self.conn.execute("""
+                INSERT INTO intraday_prices_tz
+                SELECT Datetime AT TIME ZONE 'UTC', Symbol, Open, High, Low, Close, Volume
+                FROM intraday_prices
+            """)
+            self.conn.execute("DROP TABLE intraday_prices")
+            self.conn.execute("ALTER TABLE intraday_prices_tz RENAME TO intraday_prices")
+            self.conn.execute("COMMIT")
+        except Exception:
+            self.conn.execute("ROLLBACK")
+            raise
 
     def reset(self) -> None:
         """Drop and recreate the table. Destructive — for explicit bootstrap only."""
