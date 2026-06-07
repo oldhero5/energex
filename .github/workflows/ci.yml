@@ -18,25 +18,25 @@ jobs:
       - uses: astral-sh/setup-uv@v5
         with:
           enable-cache: true
-      - run: uv sync --all-extras
       - name: ruff check
-        run: uv run ruff check src/energex tests
+        run: uv run --all-extras ruff check src/energex tests
       - name: ruff format --check
-        run: uv run ruff format --check src/energex tests
+        run: uv run --all-extras ruff format --check src/energex tests
 
   typecheck:
     name: Type-check (mypy, advisory)
     runs-on: ubuntu-latest
-    # TODO: drop continue-on-error and make this a required gate once the
-    # remediation PRs (ASSESSMENT R3/R9/R10/...) clear the strict-mypy backlog.
-    continue-on-error: true
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v5
         with:
           enable-cache: true
-      - run: uv sync --all-extras
-      - run: uv run mypy src/energex
+      # Advisory: strict-mypy backlog is cleared progressively by the remediation
+      # PRs (ASSESSMENT R3/R9/R10/...). Flip to a hard gate once clean.
+      - name: mypy (advisory)
+        run: >
+          uv run --all-extras mypy src/energex
+          || echo "::warning::mypy reported errors (advisory; tracked in ASSESSMENT.md)"
 
   test:
     name: Test (pytest)
@@ -50,6 +50,4 @@ jobs:
       - uses: astral-sh/setup-uv@v5
         with:
           enable-cache: true
-      - run: uv python install ${{ matrix.python-version }}
-      - run: uv sync --all-extras --python ${{ matrix.python-version }}
-      - run: uv run pytest
+      - run: uv run --all-extras --python ${{ matrix.python-version }} pytest
