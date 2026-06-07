@@ -4,7 +4,7 @@ import hashlib
 import logging
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 from energex.exceptions import DataFetchError
 
@@ -88,7 +88,7 @@ class RSSNewsSource(NewsSource):
             ) from e
 
         articles: list[NewsArticle] = []
-        cutoff_time = datetime.now() - timedelta(hours=hours_back)
+        cutoff_time = datetime.now(timezone.utc) - timedelta(hours=hours_back)
 
         for feed_url in self.ENERGY_RSS_FEEDS:
             try:
@@ -98,13 +98,16 @@ class RSSNewsSource(NewsSource):
                 for entry in feed.entries:
                     # Parse publication date
                     pub_date = None
+                    # feedparser normalizes *_parsed to UTC; make it tz-aware so all
+                    # article timestamps share one timezone (mixing naive/aware crashes
+                    # the downstream sort and the price join_asof).
                     if hasattr(entry, "published_parsed") and entry.published_parsed:
-                        pub_date = datetime(*entry.published_parsed[:6])
+                        pub_date = datetime(*entry.published_parsed[:6], tzinfo=timezone.utc)
                     elif hasattr(entry, "updated_parsed") and entry.updated_parsed:
-                        pub_date = datetime(*entry.updated_parsed[:6])
+                        pub_date = datetime(*entry.updated_parsed[:6], tzinfo=timezone.utc)
                     else:
                         # If no date, assume recent
-                        pub_date = datetime.now()
+                        pub_date = datetime.now(timezone.utc)
 
                     # Filter by time window
                     if pub_date < cutoff_time:
@@ -122,16 +125,17 @@ class RSSNewsSource(NewsSource):
                         entry.title + " " + (summary or ""), symbols
                     )
 
-                    if relevant_symbols:
-                        article = NewsArticle(
-                            title=entry.title,
-                            source=feed_url.split("/")[2],  # Extract domain
-                            published_at=pub_date,
-                            url=entry.link,
-                            summary=summary,
-                            symbols=relevant_symbols,
-                        )
-                        articles.append(article)
+                    # Keep general (no-keyword-match) articles too, but with
+                    # symbols=None so the analyzer assigns them by impact sector.
+                    article = NewsArticle(
+                        title=entry.title,
+                        source=feed_url.split("/")[2],  # Extract domain
+                        published_at=pub_date,
+                        url=entry.link,
+                        summary=summary,
+                        symbols=relevant_symbols or None,
+                    )
+                    articles.append(article)
 
             except Exception as e:
                 self.logger.warning(f"Failed to fetch RSS feed {feed_url}: {e}")
@@ -166,10 +170,9 @@ class RSSNewsSource(NewsSource):
             if any(keyword in text_lower for keyword in keywords):
                 matched.append(symbol)
 
-        # If no specific match, assign to all symbols (general energy news)
-        if not matched:
-            matched = symbols
-
+        # No blanket fallback: a generic headline returns [] here so the analyzer can
+        # assign it by LLM impact_sector instead of triple-counting it across all
+        # symbols with identical sentiment.
         return matched
 
 
@@ -228,7 +231,7 @@ class NewsAPISource(NewsSource):
                         published_at=pub_date,
                         url=item["url"],
                         summary=item.get("description"),
-                        symbols=symbols,  # Assign all symbols for now
+                        symbols=None,  # assigned by the analyzer's impact-sector mapping
                     )
                     articles.append(article)
 
