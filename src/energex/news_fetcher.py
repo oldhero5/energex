@@ -50,9 +50,7 @@ class NewsSource(ABC):
         self.logger = logging.getLogger(__name__)
 
     @abstractmethod
-    def fetch_articles(
-        self, symbols: list[str], hours_back: int = 24
-    ) -> list[NewsArticle]:
+    def fetch_articles(self, symbols: list[str], hours_back: int = 24) -> list[NewsArticle]:
         """
         Fetch news articles for given symbols.
 
@@ -80,9 +78,7 @@ class RSSNewsSource(NewsSource):
         "https://www.energyvoice.com/feed/",
     ]
 
-    def fetch_articles(
-        self, symbols: list[str], hours_back: int = 24
-    ) -> list[NewsArticle]:
+    def fetch_articles(self, symbols: list[str], hours_back: int = 24) -> list[NewsArticle]:
         """Fetch articles from RSS feeds."""
         try:
             import feedparser
@@ -191,9 +187,7 @@ class NewsAPISource(NewsSource):
         self.api_key = api_key
         self.base_url = "https://newsapi.org/v2/everything"
 
-    def fetch_articles(
-        self, symbols: list[str], hours_back: int = 24
-    ) -> list[NewsArticle]:
+    def fetch_articles(self, symbols: list[str], hours_back: int = 24) -> list[NewsArticle]:
         """Fetch articles from NewsAPI."""
         if not self.api_key:
             self.logger.warning("NewsAPI key not configured, skipping NewsAPI source")
@@ -202,18 +196,14 @@ class NewsAPISource(NewsSource):
         try:
             import requests
         except ImportError as e:
-            raise DataFetchError(
-                "requests not installed. Install with: pip install energex"
-            ) from e
+            raise DataFetchError("requests not installed. Install with: pip install energex") from e
 
         articles: list[NewsArticle] = []
 
         # Energy-related search queries
         queries = ["oil price", "natural gas", "energy market", "crude oil", "brent"]
 
-        from_date = (datetime.now() - timedelta(hours=hours_back)).strftime(
-            "%Y-%m-%dT%H:%M:%S"
-        )
+        from_date = (datetime.now() - timedelta(hours=hours_back)).strftime("%Y-%m-%dT%H:%M:%S")
 
         for query in queries:
             try:
@@ -230,9 +220,7 @@ class NewsAPISource(NewsSource):
                 data = response.json()
 
                 for item in data.get("articles", []):
-                    pub_date = datetime.fromisoformat(
-                        item["publishedAt"].replace("Z", "+00:00")
-                    )
+                    pub_date = datetime.fromisoformat(item["publishedAt"].replace("Z", "+00:00"))
 
                     article = NewsArticle(
                         title=item["title"],
@@ -298,9 +286,7 @@ class NewsFetcher:
                     f"Source {source.__class__.__name__} returned {len(source_articles)} articles"
                 )
             except Exception as e:
-                self.logger.error(
-                    f"Source {source.__class__.__name__} failed: {e}", exc_info=True
-                )
+                self.logger.error(f"Source {source.__class__.__name__} failed: {e}", exc_info=True)
                 continue
 
         # Deduplicate using set (relies on NewsArticle.__hash__)

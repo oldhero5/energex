@@ -38,8 +38,7 @@ def setup_logging(
         file_handler = logging.FileHandler(log_path)
         file_handler.setFormatter(
             logging.Formatter(
-                "%(asctime)s - %(name)s - %(levelname)s - "
-                "%(funcName)s:%(lineno)d - %(message)s"
+                "%(asctime)s - %(name)s - %(levelname)s - %(funcName)s:%(lineno)d - %(message)s"
             )
         )
         handlers.append(file_handler)

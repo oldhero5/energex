@@ -17,15 +17,11 @@ class LLMConfig(BaseSettings):
     )
     model: str = Field(default="gpt-4", description="Model name for the chosen provider")
     api_key: str | None = Field(default=None, description="API key for the LLM provider")
-    base_url: str | None = Field(
-        default=None, description="Base URL for local LLM (Ollama)"
-    )
+    base_url: str | None = Field(default=None, description="Base URL for local LLM (Ollama)")
     requests_per_minute: int = Field(
         default=10, description="Maximum API requests per minute", gt=0
     )
-    cache_ttl: int = Field(
-        default=3600, description="Cache TTL for LLM responses in seconds", ge=0
-    )
+    cache_ttl: int = Field(default=3600, description="Cache TTL for LLM responses in seconds", ge=0)
 
     model_config = SettingsConfigDict(env_prefix="", case_sensitive=False)
 
@@ -35,9 +31,7 @@ class LLMConfig(BaseSettings):
         """Validate LLM provider choice."""
         valid_providers = ["openai", "anthropic", "ollama"]
         if v not in valid_providers:
-            raise ConfigurationError(
-                f"Invalid LLM provider: {v}. Must be one of {valid_providers}"
-            )
+            raise ConfigurationError(f"Invalid LLM provider: {v}. Must be one of {valid_providers}")
         return v
 
 
@@ -45,9 +39,7 @@ class NewsConfig(BaseSettings):
     """News API configuration."""
 
     news_api_key: str | None = Field(default=None, description="NewsAPI.org API key")
-    alpha_vantage_key: str | None = Field(
-        default=None, description="Alpha Vantage API key"
-    )
+    alpha_vantage_key: str | None = Field(default=None, description="Alpha Vantage API key")
 
     model_config = SettingsConfigDict(env_prefix="NEWS_", case_sensitive=False)
 
@@ -82,9 +74,7 @@ class LoggingConfig(BaseSettings):
         valid_levels = ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
         v_upper = v.upper()
         if v_upper not in valid_levels:
-            raise ConfigurationError(
-                f"Invalid log level: {v}. Must be one of {valid_levels}"
-            )
+            raise ConfigurationError(f"Invalid log level: {v}. Must be one of {valid_levels}")
         return v_upper
 
 
@@ -107,9 +97,7 @@ class AnalysisConfig(BaseSettings):
         default=0.5, description="Minimum confidence threshold", ge=0.0, le=1.0
     )
 
-    model_config = SettingsConfigDict(
-        env_prefix="SENTIMENT_", case_sensitive=False
-    )
+    model_config = SettingsConfigDict(env_prefix="SENTIMENT_", case_sensitive=False)
 
 
 class EnergexSettings(BaseSettings):
@@ -133,12 +121,8 @@ class EnergexSettings(BaseSettings):
     openai_api_key: str | None = Field(default=None, description="OpenAI API key")
     anthropic_api_key: str | None = Field(default=None, description="Anthropic API key")
     ollama_base_url: str | None = Field(default=None, description="Ollama base URL")
-    llm_requests_per_minute: int | None = Field(
-        default=None, description="LLM requests per minute"
-    )
-    llm_cache_ttl_seconds: int | None = Field(
-        default=None, description="LLM cache TTL"
-    )
+    llm_requests_per_minute: int | None = Field(default=None, description="LLM requests per minute")
+    llm_cache_ttl_seconds: int | None = Field(default=None, description="LLM cache TTL")
 
     model_config = SettingsConfigDict(
         env_file=".env", env_file_encoding="utf-8", case_sensitive=False, extra="ignore"

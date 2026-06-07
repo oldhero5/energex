@@ -373,9 +373,7 @@ Only output valid JSON, nothing else."""
         else:  # latest
             agg_sentiment = (
                 sentiment_df.sort("Datetime", descending=True)
-                .with_columns(
-                    [pl.col("Datetime").dt.truncate(time_window).alias("time_window")]
-                )
+                .with_columns([pl.col("Datetime").dt.truncate(time_window).alias("time_window")])
                 .group_by(["Symbol", "time_window"])
                 .agg(
                     [
@@ -442,13 +440,9 @@ Only output valid JSON, nothing else."""
 
         # Average sentiment by symbol
         avg_by_symbol = (
-            sentiment_df.group_by("Symbol")
-            .agg(pl.col("sentiment_score").mean())
-            .to_dicts()
+            sentiment_df.group_by("Symbol").agg(pl.col("sentiment_score").mean()).to_dicts()
         )
-        avg_sentiment_map = {
-            row["Symbol"]: float(row["sentiment_score"]) for row in avg_by_symbol
-        }
+        avg_sentiment_map = {row["Symbol"]: float(row["sentiment_score"]) for row in avg_by_symbol}
 
         # Sentiment distribution
         bullish = len(sentiment_df.filter(pl.col("sentiment_score") > 0.3))

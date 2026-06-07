@@ -85,9 +85,7 @@ class OpenAIProvider(BaseLLMProvider):
     def generate_completion(self, system_prompt: str, user_prompt: str) -> str:
         """Generate completion using OpenAI API."""
         if not self.is_available():
-            raise LLMProviderError(
-                "OpenAI provider not available. Check API key configuration."
-            )
+            raise LLMProviderError("OpenAI provider not available. Check API key configuration.")
 
         try:
             client = self._get_client()
@@ -113,9 +111,7 @@ class OpenAIProvider(BaseLLMProvider):
 class AnthropicProvider(BaseLLMProvider):
     """Anthropic API provider (Claude 3.5, Claude 3 Opus, etc.)."""
 
-    def __init__(
-        self, model: str = "claude-3-5-sonnet-20241022", api_key: str | None = None
-    ):
+    def __init__(self, model: str = "claude-3-5-sonnet-20241022", api_key: str | None = None):
         """Initialize Anthropic provider."""
         super().__init__(model, api_key)
         self._client: Any | None = None
@@ -146,9 +142,7 @@ class AnthropicProvider(BaseLLMProvider):
     def generate_completion(self, system_prompt: str, user_prompt: str) -> str:
         """Generate completion using Anthropic API."""
         if not self.is_available():
-            raise LLMProviderError(
-                "Anthropic provider not available. Check API key configuration."
-            )
+            raise LLMProviderError("Anthropic provider not available. Check API key configuration.")
 
         try:
             client = self._get_client()
@@ -195,7 +189,10 @@ class OllamaProvider(BaseLLMProvider):
     """Local LLM provider using Ollama."""
 
     def __init__(
-        self, model: str = "llama3", base_url: str = "http://localhost:11434", api_key: str | None = None
+        self,
+        model: str = "llama3",
+        base_url: str = "http://localhost:11434",
+        api_key: str | None = None,
     ):
         """Initialize Ollama provider."""
         super().__init__(model, api_key)
@@ -226,7 +223,12 @@ class OllamaProvider(BaseLLMProvider):
 
             response = httpx.post(
                 f"{self.base_url}/api/generate",
-                json={"model": self.model, "prompt": full_prompt, "stream": False, "format": "json"},
+                json={
+                    "model": self.model,
+                    "prompt": full_prompt,
+                    "stream": False,
+                    "format": "json",
+                },
                 timeout=60.0,
             )
             response.raise_for_status()
@@ -285,8 +287,7 @@ class LLMProviderFactory:
         provider_lower = provider.lower()
         if provider_lower not in cls._providers:
             raise ConfigurationError(
-                f"Unknown LLM provider: {provider}. "
-                f"Valid options: {list(cls._providers.keys())}"
+                f"Unknown LLM provider: {provider}. Valid options: {list(cls._providers.keys())}"
             )
 
         provider_class = cls._providers[provider_lower]
