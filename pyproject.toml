@@ -79,7 +79,7 @@ ignore = ["E501"]
 # print() -> structured logging (R10): removed when logging is wired in.
 "src/energex/main.py" = ["T201"]
 "src/energex/data_fetcher.py" = ["T201"]
-"src/energex/database.py" = ["T201", "W291", "W293"]  # + in-SQL-string whitespace; rewritten in R1/R2.
+"src/energex/database.py" = ["T201"]  # print() -> structured logging pending (R10)
 # numpy import + dict()->literal cleanup land with the charts fix (R3).
 "src/energex/visualization/charts.py" = ["F821", "C408"]
 

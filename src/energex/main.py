@@ -1,13 +1,14 @@
 # src/energex/main.py
+import argparse
 from datetime import datetime
 
 from energex.data_fetcher import EnergyDataFetcher
 from energex.database import EnergyDatabase
 
 
-def update_intraday_data():
-    """Update intraday data for all commodities."""
-    db = EnergyDatabase()
+def update_intraday_data(db_path: str = "energy.db") -> None:
+    """Update intraday data for all commodities (idempotent upsert into the store)."""
+    db = EnergyDatabase(db_path)
     fetcher = EnergyDataFetcher()
 
     print(f"\nStarting intraday data update at {datetime.now()}")
@@ -41,18 +42,48 @@ def update_intraday_data():
             print(f"- {symbol}: {error}")
 
 
-def main():
-    """Main entry point."""
-    import argparse
+def check_schema(db_path: str = "energy.db") -> list[tuple[object, ...]]:
+    """Return the intraday_prices schema using a READ-ONLY connection.
 
+    Inspection must never mutate the store (the previous ``--check`` path dropped
+    the table on connect).
+    """
+    db = EnergyDatabase(db_path, read_only=True)
+    try:
+        return db.conn.execute("DESCRIBE intraday_prices").fetchall()
+    finally:
+        db.conn.close()
+
+
+def reset_database(db_path: str = "energy.db") -> None:
+    """Drop and recreate the table. Destructive — explicit opt-in only."""
+    db = EnergyDatabase(db_path)
+    try:
+        db.reset()
+        print(f"Reset database at {db_path}")
+    finally:
+        db.conn.close()
+
+
+def main() -> None:
+    """Main entry point."""
     parser = argparse.ArgumentParser(description="Energy commodity data collector")
-    parser.add_argument("--check", action="store_true", help="Check database schema and tables")
+    parser.add_argument(
+        "--check", action="store_true", help="Inspect the database schema (read-only)"
+    )
+    parser.add_argument(
+        "--reset",
+        action="store_true",
+        help="Drop and recreate the table (DESTRUCTIVE; deletes all history)",
+    )
 
     args = parser.parse_args()
 
     if args.check:
-        db = EnergyDatabase()
-        db.conn.execute("DESCRIBE intraday_prices").show()
+        for row in check_schema():
+            print(row)
+    elif args.reset:
+        reset_database()
     else:
         update_intraday_data()
 
