@@ -105,7 +105,8 @@ if check_sentiment_available():
 
     # Get summary
     summary = analyzer.get_sentiment_summary(sentiment_df)
-    print(f"Average Sentiment: {summary['avg_sentiment']:.3f}")
+    for symbol, avg in summary["avg_sentiment_by_symbol"].items():
+        print(f"  {symbol}: {avg:.3f}")
 ```
 
 ## Configuration

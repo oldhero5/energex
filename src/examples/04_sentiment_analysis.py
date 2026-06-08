@@ -92,14 +92,13 @@ def analyze_sentiment():
     print("\n       SENTIMENT SUMMARY")
     print("       -" * 35)
     print(f"       Total Articles: {summary['total_articles']}")
-    print(f"       Average Sentiment: {summary['avg_sentiment']:.3f}")
     print(f"       Average Confidence: {summary['avg_confidence']:.2%}")
     print("\n       Distribution:")
     print(f"         • Bullish:  {summary['sentiment_distribution']['bullish']:3d} articles")
     print(f"         • Neutral:  {summary['sentiment_distribution']['neutral']:3d} articles")
     print(f"         • Bearish:  {summary['sentiment_distribution']['bearish']:3d} articles")
     print("\n       By Symbol:")
-    for symbol, avg_sent in summary['by_symbol'].items():
+    for symbol, avg_sent in summary['avg_sentiment_by_symbol'].items():
         sentiment_label = "🟢 BULLISH" if avg_sent > 0.2 else "🔴 BEARISH" if avg_sent < -0.2 else "⚪ NEUTRAL"
         print(f"         {symbol}: {avg_sent:+.3f} {sentiment_label}")
 

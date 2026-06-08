@@ -114,7 +114,7 @@ print("✅ Data fetcher initialized")
 
 # Fetch latest data for all symbols
 print("\nFetching data for CL=F, BZ=F, NG=F...")
-fetcher.fetch_and_store(['CL=F', 'BZ=F', 'NG=F'])
+db.insert_intraday_data(fetcher.fetch_all_commodities())
 print("✅ Data fetched and stored")
 
 # Query and display data
@@ -181,7 +181,7 @@ print(f"✅ Quality metrics calculated: {len(quality_results)} metrics")
 print("\n[3/3] Testing FuturesAnalyzer...")
 try:
     futures_analyzer = FuturesAnalyzer(df)
-    futures_summary = futures_analyzer.get_analysis_summary()
+    futures_summary = futures_analyzer.calculate_term_structure("CL=F", "BZ=F")
     print(f"✅ Futures analysis complete")
 except Exception as e:
     print(f"⚠️  Futures analysis skipped (requires futures data): {e}")
@@ -309,7 +309,7 @@ try:
         summary = analyzer.get_sentiment_summary(sentiment_df)
         print(f"\nSentiment Summary:")
         print(f"  Total articles: {summary['total_articles']}")
-        print(f"  Avg sentiment: {summary['avg_sentiment']:.3f}")
+        print(f"  Avg confidence: {summary['avg_confidence']:.3f}")
         print(f"  Bullish: {summary['sentiment_distribution']['bullish']}")
         print(f"  Bearish: {summary['sentiment_distribution']['bearish']}")
         print(f"  Neutral: {summary['sentiment_distribution']['neutral']}")
@@ -482,7 +482,7 @@ print("=" * 70)
 print("\n[1/4] Testing data pipeline...")
 db = EnergyDatabase()
 fetcher = EnergyDataFetcher(db)
-fetcher.fetch_and_store(['CL=F'])
+db.insert_intraday_data(fetcher.fetch_all_commodities())
 query = "SELECT * FROM intraday_prices WHERE Symbol = 'CL=F' LIMIT 100"
 df = pl.from_arrow(db.conn.execute(query).arrow())
 assert len(df) > 0, "No data fetched"
@@ -513,7 +513,7 @@ else:
 print("\n[4/4] Testing configuration...")
 from energex import get_settings
 settings = get_settings()
-assert settings.database.path.exists() or str(settings.database.path) == './data/energex.db'
+assert hasattr(settings.database, "db_path")
 print(f"✅ Configuration loaded")
 
 print("\n" + "=" * 70)

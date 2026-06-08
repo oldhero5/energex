@@ -277,7 +277,7 @@ ORDER BY Symbol, Datetime
 
 ```python
 # In 00_setup_data.py
-fetcher.fetch_and_store(['CL=F', 'BZ=F', 'NG=F', 'HO=F', 'RB=F'])
+db.insert_intraday_data(fetcher.fetch_all_commodities())
 ```
 
 ### Adjust Thresholds
@@ -420,7 +420,7 @@ import schedule
 
 def update_data_and_analyze():
     fetcher = EnergyDataFetcher(db)
-    fetcher.fetch_and_store(['CL=F', 'BZ=F', 'NG=F'])
+    db.insert_intraday_data(fetcher.fetch_all_commodities())
     # Run your analysis...
 
 schedule.every(1).hour.do(update_data_and_analyze)

@@ -28,15 +28,14 @@ Quick Start:
     >>> from energex.analysis import VolatilityAnalyzer
     >>>
     >>> # Fetch and store data
-    >>> db = EnergyDatabase()
-    >>> fetcher = EnergyDataFetcher(db)
-    >>> fetcher.fetch_and_store(['CL=F', 'NG=F'])
+    >>> fetcher = EnergyDataFetcher()
+    >>> data = fetcher.fetch_all_commodities()  # or get_commodity_data('crude')
+    >>> with EnergyDatabase() as db:
+    ...     db.insert_intraday_data(data)
     >>>
-    >>> # Analyze volatility
-    >>> import polars as pl
-    >>> df = pl.from_arrow(db.conn.execute("SELECT * FROM intraday_prices").arrow())
-    >>> analyzer = VolatilityAnalyzer(df)
-    >>> results = analyzer.calculate_volatility_metrics()
+    >>> # Analyze volatility (read-only)
+    >>> stored = EnergyDatabase(read_only=True).query("SELECT * FROM intraday_prices")
+    >>> results = VolatilityAnalyzer(stored).calculate_volatility_metrics()
 
 Configuration:
     Create a .env file based on .env.example to configure:
