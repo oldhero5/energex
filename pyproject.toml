@@ -70,6 +70,10 @@ all = [
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
+[tool.hatch.build.targets.wheel]
+# Ship only the package; the sibling src/examples must not leak into the wheel.
+packages = ["src/energex"]
+
 [tool.ruff]
 line-length = 100
 target-version = "py310"
