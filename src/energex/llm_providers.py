@@ -96,7 +96,7 @@ class OpenAIProvider(BaseLLMProvider):
                     {"role": "user", "content": user_prompt},
                 ],
                 response_format={"type": "json_object"},
-                temperature=0.3,
+                temperature=0,
             )
             content = response.choices[0].message.content
             if content is None:
@@ -151,7 +151,7 @@ class AnthropicProvider(BaseLLMProvider):
                 max_tokens=1024,
                 system=system_prompt,
                 messages=[{"role": "user", "content": user_prompt}],
-                temperature=0.3,
+                temperature=0,
             )
 
             # Extract text content from response
