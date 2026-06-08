@@ -1,40 +1,37 @@
 name: Publish to PyPI
 
+# Optional wheel publishing (the primary artifact is the container image built in ci.yml).
+# Uses PyPI Trusted Publishing (OIDC) — no long-lived token. Configure a trusted
+# publisher for this workflow on PyPI before the first release.
 on:
   release:
-    types: [created]
+    types: [published]
+  workflow_dispatch:
 
 jobs:
-  build-and-publish:
+  build:
+    name: Build distribution
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v3
-    
-    - name: Set up Python
-      uses: actions/setup-python@v4
-      with:
-        python-version: "3.12"
-    
-    - name: Install uv
-      run: |
-        curl -LsSf https://astral.sh/uv/install.sh | sh
-        echo "$HOME/.cargo/bin" >> $GITHUB_PATH
-    
-    - name: Setup virtual environment and install dependencies
-      run: |
-        uv venv
-        source .venv/bin/activate
-        uv pip install build twine
-    
-    - name: Build package
-      run: |
-        source .venv/bin/activate
-        python -m build
-    
-    - name: Publish to PyPI
-      env:
-        TWINE_USERNAME: __token__
-        TWINE_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}
-      run: |
-        source .venv/bin/activate
-        twine upload dist/*
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - run: uv build
+      - run: uvx twine check dist/*
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+  publish:
+    name: Publish to PyPI (OIDC)
+    needs: build
+    runs-on: ubuntu-latest
+    environment: pypi
+    permissions:
+      id-token: write  # OIDC trusted publishing
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+      - uses: pypa/gh-action-pypi-publish@release/v1
