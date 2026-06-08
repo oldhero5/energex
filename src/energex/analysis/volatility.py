@@ -78,3 +78,89 @@ class VolatilityAnalyzer:
                 ),
             ]
         )
+
+    # ------------------------------------------------------------------
+    # Methodologically-correct estimators (ASSESSMENT R7)
+    # ------------------------------------------------------------------
+    def realized_volatility_daily(self) -> pl.DataFrame:
+        """Canonical daily realized volatility per symbol.
+
+        Realized variance is the SUM of squared intraday log returns (not a
+        mean-subtracted rolling std), with the overnight (cross-day) return masked so
+        a session gap is never treated as an intraday return. Daily volatility
+        (sqrt of the daily realized variance) is annualized by sqrt(252).
+        """
+        df = self.df.sort(["Symbol", "Datetime"]).with_columns(
+            [
+                pl.col("Close").log().diff().over("Symbol").alias("log_ret"),
+                pl.col("Datetime").dt.date().alias("date"),
+            ]
+        )
+        # Mask the first bar of each day (its diff spans the overnight gap).
+        df = df.with_columns(
+            pl.when(pl.col("date") != pl.col("date").shift(1).over("Symbol"))
+            .then(None)
+            .otherwise(pl.col("log_ret"))
+            .alias("log_ret")
+        )
+        return (
+            df.group_by(["Symbol", "date"])
+            .agg(pl.col("log_ret").pow(2).sum().alias("realized_variance"))
+            .with_columns(
+                (pl.col("realized_variance").sqrt() * np.sqrt(252)).alias("realized_vol_annual")
+            )
+            .sort(["Symbol", "date"])
+        )
+
+    def to_daily_ohlc(self) -> pl.DataFrame:
+        """Resample intraday bars to daily OHLC per symbol."""
+        return (
+            self.df.sort(["Symbol", "Datetime"])
+            .group_by_dynamic("Datetime", every="1d", group_by="Symbol")
+            .agg(
+                [
+                    pl.col("Open").first().alias("Open"),
+                    pl.col("High").max().alias("High"),
+                    pl.col("Low").min().alias("Low"),
+                    pl.col("Close").last().alias("Close"),
+                    pl.col("Volume").sum().alias("Volume"),
+                ]
+            )
+            .sort(["Symbol", "Datetime"])
+        )
+
+    def yang_zhang_volatility(self) -> pl.DataFrame:
+        """Annualized Yang-Zhang volatility per symbol (drift- and gap-independent).
+
+        Computed on DAILY OHLC bars (range estimators are daily tools). Combines
+        overnight, open-to-close, and Rogers-Satchell variances; requires >= 2 days.
+        """
+        daily = self.to_daily_ohlc().with_columns(
+            pl.col("Close").shift(1).over("Symbol").alias("prev_close")
+        )
+        daily = daily.with_columns(
+            [
+                (pl.col("Open") / pl.col("prev_close")).log().alias("o"),
+                (pl.col("Close") / pl.col("Open")).log().alias("c"),
+                (
+                    (pl.col("High") / pl.col("Close")).log()
+                    * (pl.col("High") / pl.col("Open")).log()
+                    + (pl.col("Low") / pl.col("Close")).log()
+                    * (pl.col("Low") / pl.col("Open")).log()
+                ).alias("rs"),
+            ]
+        )
+        agg = daily.group_by("Symbol").agg(
+            [
+                pl.col("o").var().alias("v_o"),
+                pl.col("c").var().alias("v_c"),
+                pl.col("rs").mean().alias("v_rs"),
+                pl.len().alias("n"),
+            ]
+        )
+        k = 0.34 / (1.34 + (pl.col("n") + 1) / (pl.col("n") - 1))
+        return agg.with_columns(
+            (
+                (pl.col("v_o") + k * pl.col("v_c") + (1 - k) * pl.col("v_rs")).sqrt() * np.sqrt(252)
+            ).alias("yang_zhang_vol_annual")
+        ).select(["Symbol", "n", "yang_zhang_vol_annual"])
