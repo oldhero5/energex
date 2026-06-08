@@ -98,6 +98,7 @@ def test_scheduler_registers_ingest_job():
 
 def test_run_ingestion_upserts(monkeypatch, tmp_db_path):
     from energex.service import pipeline
+    from energex.sources.yfinance_source import YFinanceDataSource
 
     fake = pl.DataFrame(
         {
@@ -110,7 +111,7 @@ def test_run_ingestion_upserts(monkeypatch, tmp_db_path):
             "Volume": [1],
         }
     )
-    monkeypatch.setattr(pipeline.EnergyDataFetcher, "fetch_all_commodities", lambda self: fake)
+    monkeypatch.setattr(YFinanceDataSource, "fetch_all", lambda self: fake)
     db = EnergyDatabase(tmp_db_path)
     n = pipeline.run_ingestion(db)
     count = db.conn.execute("SELECT COUNT(*) FROM intraday_prices").fetchone()[0]
