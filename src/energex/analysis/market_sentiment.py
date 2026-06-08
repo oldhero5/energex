@@ -2,14 +2,43 @@
 
 import json
 import logging
-from typing import Literal
+import time
+from typing import Any, Literal
 
 import polars as pl
+from pydantic import BaseModel, Field, field_validator
 
 from energex.config import get_settings
 from energex.exceptions import AnalysisError, LLMProviderError
 from energex.llm_providers import BaseLLMProvider, LLMProviderFactory
 from energex.news_fetcher import NewsAPISource, NewsFetcher, NewsSource, RSSNewsSource
+from energex.rate_limiter import RateLimiter
+
+
+class SentimentResult(BaseModel):
+    """Validated, clamped sentiment output (structured-output schema)."""
+
+    sentiment_score: float = 0.0
+    confidence: float = 0.5
+    impact_sector: str = "General"
+    trade_signal: Literal["LONG", "SHORT", "NEUTRAL"] = "NEUTRAL"
+    key_factors: list[str] = Field(default_factory=list)
+
+    @field_validator("sentiment_score")
+    @classmethod
+    def _clamp_score(cls, v: float) -> float:
+        return max(-1.0, min(1.0, float(v)))
+
+    @field_validator("confidence")
+    @classmethod
+    def _clamp_confidence(cls, v: float) -> float:
+        return max(0.0, min(1.0, float(v)))
+
+    @field_validator("trade_signal", mode="before")
+    @classmethod
+    def _normalize_signal(cls, v: object) -> str:
+        s = str(v).upper()
+        return s if s in ("LONG", "SHORT", "NEUTRAL") else "NEUTRAL"
 
 
 class MarketSentimentAnalyzer:
@@ -79,8 +108,12 @@ class MarketSentimentAnalyzer:
 
         self.news_fetcher = NewsFetcher(news_sources)
 
-        # Simple dict-based cache for LLM responses (avoids lru_cache memory leak on methods)
-        self._sentiment_cache: dict[str, dict[str, any]] = {}  # type: ignore
+        # TTL cache for LLM responses: key -> (result, inserted_at). _clock is overridable
+        # in tests. Replaces the previous unbounded dict that ignored cache_ttl.
+        self._sentiment_cache: dict[str, tuple[dict[str, Any], float]] = {}
+        self._cache_ttl = self.settings.llm.cache_ttl
+        self._clock = time.monotonic
+        self._rate_limiter = RateLimiter(max_calls=self.settings.llm.requests_per_minute, period=60)
 
         # System prompt for LLM
         self.system_prompt = """You are a senior energy derivatives trader analyzing market news.
@@ -186,45 +219,29 @@ Only output valid JSON, nothing else."""
         self.logger.info(f"Generated sentiment for {len(sentiment_df)} article-symbol pairs")
         return sentiment_df
 
-    def _analyze_article(self, title: str, summary: str | None) -> dict[str, any]:  # type: ignore
+    def _analyze_article(self, title: str, summary: str | None) -> dict[str, Any]:
+        """Analyze a single article with the LLM, with TTL caching and rate limiting.
+
+        Returns a validated/clamped sentiment dict; degrades to the rule-based fallback
+        if the LLM is unavailable or returns a malformed response.
         """
-        Analyze a single article with LLM (with caching).
-
-        Uses instance-level dict cache to avoid memory leaks from lru_cache on methods.
-
-        Args:
-            title: Article headline.
-            summary: Article summary/description.
-
-        Returns:
-            Dictionary with sentiment analysis results.
-        """
-        # Check cache first
         cache_key = f"{title}::{summary}"
-        if cache_key in self._sentiment_cache:
-            return self._sentiment_cache[cache_key]
-        # Use LLM if available
+        cached = self._sentiment_cache.get(cache_key)
+        if cached is not None:
+            result, inserted_at = cached
+            if self._clock() - inserted_at < self._cache_ttl:
+                return result
+
         if self.llm and self.llm.is_available():
             try:
                 user_prompt = f"Headline: {title}\nSummary: {summary or 'N/A'}"
-                response = self.llm.generate_completion(self.system_prompt, user_prompt)
+                # Apply the configured rate limit to the LLM call.
+                generate = self._rate_limiter(self.llm.generate_completion)
+                response = generate(self.system_prompt, user_prompt)
 
-                # Parse JSON response
-                analysis = json.loads(response)
-
-                # Validate and normalize
-                result = {
-                    "sentiment_score": float(
-                        max(-1.0, min(1.0, analysis.get("sentiment_score", 0.0)))
-                    ),
-                    "confidence": float(max(0.0, min(1.0, analysis.get("confidence", 0.5)))),
-                    "impact_sector": str(analysis.get("impact_sector", "General")),
-                    "trade_signal": str(analysis.get("trade_signal", "NEUTRAL")).upper(),
-                    "key_factors": list(analysis.get("key_factors", [])),
-                }
-
-                # Cache the result
-                self._sentiment_cache[cache_key] = result
+                # Validate + clamp via the structured-output schema.
+                result = SentimentResult.model_validate(json.loads(response)).model_dump()
+                self._sentiment_cache[cache_key] = (result, self._clock())
                 return result
 
             except (json.JSONDecodeError, LLMProviderError, TypeError, ValueError, KeyError) as e:
@@ -234,10 +251,10 @@ Only output valid JSON, nothing else."""
 
         # Fallback: simple rule-based sentiment
         result = self._rule_based_sentiment(title, summary)
-        self._sentiment_cache[cache_key] = result
+        self._sentiment_cache[cache_key] = (result, self._clock())
         return result
 
-    def _rule_based_sentiment(self, title: str, summary: str | None) -> dict[str, any]:  # type: ignore
+    def _rule_based_sentiment(self, title: str, summary: str | None) -> dict[str, Any]:
         """
         Simple rule-based sentiment analysis fallback.
 
@@ -430,7 +447,7 @@ Only output valid JSON, nothing else."""
         self.logger.info(f"Added sentiment to {len(result)} price rows")
         return result
 
-    def get_sentiment_summary(self, sentiment_df: pl.DataFrame) -> dict[str, any]:  # type: ignore
+    def get_sentiment_summary(self, sentiment_df: pl.DataFrame) -> dict[str, Any]:
         """
         Get summary statistics of sentiment analysis.
 
@@ -500,7 +517,7 @@ Only output valid JSON, nothing else."""
                 "neutral": neutral,
                 "bearish": bearish,
             },
-            "avg_confidence": float(sentiment_df["confidence"].mean()),
+            "avg_confidence": float(sentiment_df["confidence"].mean() or 0.0),
             "date_range": [
                 sentiment_df["Datetime"].min(),
                 sentiment_df["Datetime"].max(),
