@@ -219,6 +219,11 @@ Only output valid JSON, nothing else."""
         self.logger.info(f"Generated sentiment for {len(sentiment_df)} article-symbol pairs")
         return sentiment_df
 
+    def analyze_headline(self, title: str, summary: str | None = None) -> dict[str, Any]:
+        """Analyze a single headline with the configured LLM (TTL-cached, rate-limited),
+        falling back to rule-based sentiment if the LLM is unavailable."""
+        return self._analyze_article(title, summary)
+
     def _analyze_article(self, title: str, summary: str | None) -> dict[str, Any]:
         """Analyze a single article with the LLM, with TTL caching and rate limiting.
 

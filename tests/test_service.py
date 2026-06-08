@@ -118,3 +118,24 @@ def test_run_ingestion_upserts(monkeypatch, tmp_db_path):
     db.conn.close()
     assert n == 1
     assert count == 1
+
+
+def test_sentiment_endpoint_returns_analysis(client, monkeypatch):
+    from energex.analysis.market_sentiment import MarketSentimentAnalyzer
+
+    monkeypatch.setattr(
+        MarketSentimentAnalyzer,
+        "analyze_headline",
+        lambda self, title, summary=None: {
+            "sentiment_score": 0.7,
+            "confidence": 0.9,
+            "impact_sector": "Oil",
+            "trade_signal": "LONG",
+            "key_factors": ["OPEC cuts"],
+        },
+    )
+    r = client.get("/sentiment", params={"headline": "Oil prices rise"})
+    assert r.status_code == 200
+    body = r.json()
+    assert body["sentiment"]["trade_signal"] == "LONG"
+    assert "provider" in body and "llm_available" in body
