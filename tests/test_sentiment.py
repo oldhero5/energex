@@ -122,3 +122,12 @@ def test_malformed_numeric_field_does_not_abort():
     analyzer.llm = TypeErrorLLM()  # type: ignore[assignment]
     result = analyzer._analyze_article("Gas falls", "summary")
     assert result["key_factors"] == ["Rule-based analysis"]
+
+
+def test_analyze_headline_falls_back_to_rule_based():
+    prices = _prices(["CL=F"], [datetime(2024, 1, 2, 12, tzinfo=timezone.utc)])
+    analyzer = MarketSentimentAnalyzer(prices)
+    analyzer.llm = None  # no LLM -> rule-based
+    result = analyzer.analyze_headline("Oil prices surge on OPEC production cuts")
+    assert result["trade_signal"] == "LONG"
+    assert result["sentiment_score"] > 0

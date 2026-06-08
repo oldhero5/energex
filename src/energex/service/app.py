@@ -8,6 +8,7 @@ import logging
 import os
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from datetime import datetime, timezone
 from typing import Any
 
 import polars as pl
@@ -15,6 +16,7 @@ from fastapi import FastAPI, HTTPException, Query
 from fastapi.responses import HTMLResponse
 
 from energex.analysis.futures import FuturesAnalyzer
+from energex.analysis.market_sentiment import MarketSentimentAnalyzer
 from energex.analysis.volatility import VolatilityAnalyzer
 from energex.config import get_settings
 from energex.database import EnergyDatabase
@@ -116,6 +118,19 @@ def create_app(db_path: str | None = None, start_scheduler: bool = True) -> Fast
             raise HTTPException(status_code=404, detail="no data for the requested symbols")
         out = FuturesAnalyzer(df).calculate_term_structure(front, back)
         return out.select(["Datetime", "spread", "spread_pct"]).to_dicts()
+
+    @app.get("/sentiment")
+    def sentiment(headline: str = Query(...), summary: str | None = None) -> dict[str, Any]:
+        # The provider comes from config (set DEFAULT_LLM_PROVIDER=ollama +
+        # DEFAULT_LLM_MODEL=gemma3:4b + OLLAMA_BASE_URL for the local model).
+        placeholder = pl.DataFrame(
+            {"Symbol": ["CL=F"], "Datetime": [datetime(2024, 1, 1, tzinfo=timezone.utc)]}
+        )
+        analyzer = MarketSentimentAnalyzer(placeholder)
+        result = analyzer.analyze_headline(headline, summary)
+        provider = type(analyzer.llm).__name__ if analyzer.llm else "rule-based"
+        available = bool(analyzer.llm and analyzer.llm.is_available())
+        return {"provider": provider, "llm_available": available, "sentiment": result}
 
     @app.get("/charts/price/{symbol}", response_class=HTMLResponse)
     def price_chart(symbol: str) -> str:

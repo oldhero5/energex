@@ -13,6 +13,12 @@ services:
       TZ: America/Chicago
       LOG_LEVEL: INFO
       ENERGEX_INGEST_CRON: "*/5 * * * *"
+      # Local LLM via Ollama (gemma3:4b). Reaches the host's Ollama from the container.
+      DEFAULT_LLM_PROVIDER: ollama
+      DEFAULT_LLM_MODEL: gemma3:4b
+      OLLAMA_BASE_URL: http://host.docker.internal:11434
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     ports:
       - "8000:8000"
     volumes:
