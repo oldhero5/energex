@@ -53,42 +53,29 @@ except Exception as e:
     print("This example demonstrates the API even with spot data.")
     exit(0)
 
-# Get analysis summary
-print("\n[3/3] Generating futures analysis summary...")
-try:
-    summary = analyzer.get_analysis_summary()
+# Compute an inter-contract spread between two stored symbols.
+print("\n[3/3] Computing cross-symbol spread (term-structure proxy)...")
+symbols = df["Symbol"].unique().to_list()
+if len(symbols) < 2:
+    print(f"⚠️  Need >= 2 symbols for a spread; found {symbols}.")
+    exit(0)
 
-    print("\n" + "=" * 70)
-    print("FUTURES ANALYSIS SUMMARY")
-    print("=" * 70)
+front, back = symbols[0], symbols[1]
+spread = analyzer.calculate_term_structure(front, back)
 
-    for key, value in summary.items():
-        if isinstance(value, (int, float)):
-            if isinstance(value, float):
-                print(f"{key}: {value:.4f}")
-            else:
-                print(f"{key}: {value}")
-        elif isinstance(value, dict):
-            print(f"\n{key}:")
-            for subkey, subval in value.items():
-                if isinstance(subval, float):
-                    print(f"  {subkey}: {subval:.4f}")
-                else:
-                    print(f"  {subkey}: {subval}")
-        else:
-            print(f"{key}: {value}")
+print("\n" + "=" * 70)
+print(f"{front} vs {back} SPREAD (most recent rows)")
+print("=" * 70)
+print(spread.select(["Datetime", "spread", "spread_pct"]).tail(5))
 
-    print("\n" + "=" * 70)
-    print("✅ Futures analysis complete!")
-    print("=" * 70)
-
-except Exception as e:
-    print(f"\n⚠️  Analysis completed with limitations: {e}")
-    print("\nNote: Full futures analysis requires:")
-    print("  - Multiple contract months")
-    print("  - Expiration date information")
-    print("  - Sufficient price history")
-    print("\nCurrent data is sufficient for basic analysis.")
+print(
+    "\nNote: true term-structure / roll-yield / implied-rate analytics need dated\n"
+    "contract months + a spot leg (see ASSESSMENT.md R8); those methods raise\n"
+    "NotImplementedError until a licensed dated-contract source is wired."
+)
+print("\n" + "=" * 70)
+print("✅ Futures analysis complete!")
+print("=" * 70)
 
 print("\n" + "=" * 70)
 print("✅ Example complete!")
