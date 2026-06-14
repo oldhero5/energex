@@ -150,6 +150,12 @@ class EnergyDataFetcher:
                 pl.lit(ticker).alias("Symbol"),
                 pl.col("OpenInterest").cast(pl.Int64),
             )
+            # Daily bars come back tz-naive (date-only); stamp them as UTC
+            # explicitly so the TIMESTAMPTZ column is host-independent rather
+            # than relying on the session TimeZone at insert time.
+            dt = df.schema["Datetime"]
+            if isinstance(dt, pl.Datetime) and dt.time_zone is None:
+                df = df.with_columns(pl.col("Datetime").dt.replace_time_zone("UTC"))
             df = normalize_datetime_to_utc(df)
             df = df.select(EnergyDatabase.DAILY_CONTRACTS_COLUMNS)
             dfs.append(df)

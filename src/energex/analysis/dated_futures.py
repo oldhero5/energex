@@ -81,12 +81,12 @@ class DatedFuturesAnalyzer:
                 pl.col("days_to_maturity").shift(-1).alias("dtm_far"),
             )
             .drop_nulls("Close_far")
+            .with_columns((pl.col("dtm_far") - pl.col("days_to_maturity")).alias("_span"))
             .with_columns(
-                (
-                    (pl.col("Close") / pl.col("Close_far") - 1.0)
-                    * 365.0
-                    / (pl.col("dtm_far") - pl.col("days_to_maturity"))
-                ).alias("roll_yield")
+                pl.when(pl.col("_span") > 0)
+                .then((pl.col("Close") / pl.col("Close_far") - 1.0) * 365.0 / pl.col("_span"))
+                .otherwise(None)  # degenerate same-/inverted-maturity pair: no roll yield
+                .alias("roll_yield")
             )
             .select(["ContractMonth", "ContractMonth_far", "roll_yield"])
         )
