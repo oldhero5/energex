@@ -8,20 +8,21 @@ import logging
 import os
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from typing import Any
 
 import polars as pl
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.responses import HTMLResponse
 
+from energex.analysis.dated_futures import DatedFuturesAnalyzer
 from energex.analysis.futures import FuturesAnalyzer
 from energex.analysis.market_sentiment import MarketSentimentAnalyzer
 from energex.analysis.volatility import VolatilityAnalyzer
 from energex.config import get_settings
 from energex.database import EnergyDatabase
 from energex.logging_config import setup_logging
-from energex.service.pipeline import run_ingestion
+from energex.service.pipeline import run_dated_ingestion, run_ingestion
 from energex.service.scheduler import build_scheduler
 from energex.visualization.charts import MarketVisualizer
 
@@ -54,7 +55,16 @@ def create_app(db_path: str | None = None, start_scheduler: bool = True) -> Fast
         app.state.db = db
         app.state.scheduler = None
         if start_scheduler:
-            scheduler = build_scheduler(lambda: run_ingestion(db), cron=DEFAULT_CRON)
+
+            def _ingest_job() -> None:
+                run_ingestion(db)
+                if settings.data_fetch.dated_enabled:
+                    try:
+                        run_dated_ingestion(db)
+                    except Exception as e:  # pragma: no cover - defensive
+                        logger.error("Dated ingestion failed: %s", e)
+
+            scheduler = build_scheduler(_ingest_job, cron=DEFAULT_CRON)
             scheduler.start()
             app.state.scheduler = scheduler
         logger.info("energex service started (db=%s)", resolved_db_path)
@@ -77,13 +87,18 @@ def create_app(db_path: str | None = None, start_scheduler: bool = True) -> Fast
                 .execute("SELECT COUNT(*), MAX(Datetime) FROM intraday_prices")
                 .fetchone()
             )
+            contracts_row = (
+                db.conn.cursor().execute("SELECT COUNT(*) FROM daily_contracts").fetchone()
+            )
         except Exception as e:  # pragma: no cover - defensive
             raise HTTPException(status_code=503, detail=f"database error: {e}") from e
         count, latest = row if row is not None else (0, None)
+        contract_count = contracts_row[0] if contracts_row is not None else 0
         return {
             "status": "ok",
             "rows": count,
             "latest": latest.isoformat() if latest else None,
+            "contract_rows": contract_count,
         }
 
     @app.get("/prices")
@@ -118,6 +133,27 @@ def create_app(db_path: str | None = None, start_scheduler: bool = True) -> Fast
             raise HTTPException(status_code=404, detail="no data for the requested symbols")
         out = FuturesAnalyzer(df).calculate_term_structure(front, back)
         return out.select(["Datetime", "spread", "spread_pct"]).to_dicts()
+
+    @app.get("/curve")
+    def curve(
+        commodity: str = Query(...), asof: str | None = Query(default=None)
+    ) -> list[dict[str, Any]]:
+        df = _read_df(
+            app.state.db,
+            "SELECT * FROM daily_contracts WHERE Commodity = ? ORDER BY Datetime, ContractMonth",
+            [commodity],
+        )
+        if df.is_empty():
+            raise HTTPException(status_code=404, detail=f"no dated contracts for {commodity}")
+        asof_date = (
+            date.fromisoformat(asof)
+            if asof is not None
+            else df.select(pl.col("Datetime").dt.date().max()).item()
+        )
+        out = DatedFuturesAnalyzer(df).curve_as_of(commodity, asof_date)
+        if out.is_empty():
+            raise HTTPException(status_code=404, detail=f"no curve for {commodity} on {asof_date}")
+        return out.select(["ContractMonth", "Close", "days_to_maturity"]).to_dicts()
 
     @app.get("/sentiment")
     def sentiment(headline: str = Query(...), summary: str | None = None) -> dict[str, Any]:
