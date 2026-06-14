@@ -25,3 +25,20 @@ def run_ingestion(db: EnergyDatabase, source_name: str | None = None) -> int:
     db.conn.execute("CHECKPOINT")
     logger.info("Ingestion upserted %d rows (source=%s)", df.height, source.name)
     return df.height
+
+
+def run_dated_ingestion(db: EnergyDatabase, source_name: str | None = None) -> int:
+    """Fetch the dated contract strip and upsert into ``daily_contracts``.
+
+    Mirrors :func:`run_ingestion`; the upsert on (Commodity, ContractMonth, Datetime)
+    makes repeated runs idempotent.
+    """
+    source = get_data_source(source_name or os.environ.get("ENERGEX_DATA_SOURCE", "yfinance"))
+    df = source.fetch_dated()
+    if df.is_empty():
+        logger.info("Dated ingestion produced no rows (source=%s)", source.name)
+        return 0
+    db.insert_daily_contracts(df)
+    db.conn.execute("CHECKPOINT")
+    logger.info("Dated ingestion upserted %d rows (source=%s)", df.height, source.name)
+    return df.height

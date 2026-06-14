@@ -120,6 +120,41 @@ def test_run_ingestion_upserts(monkeypatch, tmp_db_path):
     assert count == 1
 
 
+def test_run_dated_ingestion_upserts(monkeypatch, tmp_db_path, sample_daily_contracts):
+    from energex.service import pipeline
+    from energex.sources.yfinance_source import YFinanceDataSource
+
+    monkeypatch.setattr(YFinanceDataSource, "fetch_dated", lambda self: sample_daily_contracts)
+    db = EnergyDatabase(tmp_db_path)
+    n = pipeline.run_dated_ingestion(db)
+    count = db.conn.execute("SELECT COUNT(*) FROM daily_contracts").fetchone()[0]
+    db.conn.close()
+    assert n == sample_daily_contracts.height
+    assert count == sample_daily_contracts.height
+
+
+def test_curve_endpoint(tmp_db_path, sample_daily_contracts):
+    db = EnergyDatabase(tmp_db_path)
+    db.insert_daily_contracts(sample_daily_contracts)
+    db.conn.close()
+    app = create_app(db_path=tmp_db_path, start_scheduler=False)
+    with TestClient(app) as c:
+        r = c.get("/curve", params={"commodity": "crude", "asof": "2024-01-02"})
+        assert r.status_code == 200
+        data = r.json()
+        assert len(data) == 6
+        assert "days_to_maturity" in data[0]
+        # backwardation: closes decline along the curve
+        closes = [row["Close"] for row in data]
+        assert closes == sorted(closes, reverse=True)
+
+        miss = c.get("/curve", params={"commodity": "nope"})
+        assert miss.status_code == 404
+
+        health = c.get("/healthz").json()
+        assert health["contract_rows"] == sample_daily_contracts.height
+
+
 def test_sentiment_endpoint_returns_analysis(client, monkeypatch):
     from energex.analysis.market_sentiment import MarketSentimentAnalyzer
 

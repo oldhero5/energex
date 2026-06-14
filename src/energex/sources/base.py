@@ -25,3 +25,7 @@ class DataSource(ABC):
     @abstractmethod
     def fetch_all(self) -> pl.DataFrame:
         """Fetch and combine all supported commodities."""
+
+    @abstractmethod
+    def fetch_dated(self) -> pl.DataFrame:
+        """Fetch the dated forward contract strip for all supported commodities."""

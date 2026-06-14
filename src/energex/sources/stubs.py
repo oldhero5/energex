@@ -19,6 +19,9 @@ class _NotConfiguredSource(DataSource):
     def fetch_all(self) -> pl.DataFrame:
         raise NotImplementedError(self.setup)
 
+    def fetch_dated(self) -> pl.DataFrame:
+        raise NotImplementedError(self.setup)
+
 
 class DatabentoDataSource(_NotConfiguredSource):
     """Primary intraday source for CME CL/NG (per-contract symbology + expiry + OI)."""

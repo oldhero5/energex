@@ -32,6 +32,13 @@ def test_yfinance_source_delegates_to_fetcher(monkeypatch):
     assert out.equals(fake)
 
 
+def test_yfinance_source_fetch_dated_delegates(monkeypatch):
+    fake = pl.DataFrame({"Commodity": ["crude"]})
+    monkeypatch.setattr(df_mod.EnergyDataFetcher, "fetch_all_dated", lambda self: fake)
+    out = get_data_source("yfinance").fetch_dated()
+    assert out.equals(fake)
+
+
 @pytest.mark.parametrize("name", ["databento", "ice-brent", "eia-spot"])
 def test_stub_sources_raise_not_implemented(name):
     src = get_data_source(name)
@@ -40,3 +47,5 @@ def test_stub_sources_raise_not_implemented(name):
         src.fetch_all()
     with pytest.raises(NotImplementedError):
         src.fetch("crude")
+    with pytest.raises(NotImplementedError):
+        src.fetch_dated()
