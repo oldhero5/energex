@@ -23,3 +23,6 @@ class YFinanceDataSource(DataSource):
 
     def fetch_all(self) -> pl.DataFrame:
         return self._fetcher.fetch_all_commodities()
+
+    def fetch_dated(self) -> pl.DataFrame:
+        return self._fetcher.fetch_all_dated()
