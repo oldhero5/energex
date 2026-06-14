@@ -8,8 +8,10 @@ import polars as pl
 # clearly instead of crashing on a missing 'expiry' column or invalid Polars APIs.
 _NEEDS_CONTRACT_MODEL = (
     "{name} requires a contract-month/expiry data model (dated contracts, and for "
-    "carry/implied-rate a spot leg + risk-free curve). The store only holds continuous "
-    "front-month proxies (CL=F/BZ=F/NG=F). See ASSESSMENT.md R8."
+    "carry/implied-rate a spot leg + risk-free curve); this FuturesAnalyzer only has "
+    "continuous front-month proxies (CL=F/BZ=F/NG=F). For real dated-contract term "
+    "structure, slope, and roll yield use energex.analysis.dated_futures."
+    "DatedFuturesAnalyzer over the daily_contracts table. See ASSESSMENT.md R8."
 )
 
 
@@ -59,11 +61,11 @@ class FuturesAnalyzer:
     def analyze_roll_yield(
         self, front_month: str, back_month: str, window_minutes: int = 30
     ) -> pl.DataFrame:
-        """Annualized roll yield — gated (needs contract expiries)."""
+        """Annualized roll yield — gated. Use DatedFuturesAnalyzer.roll_yield instead."""
         raise NotImplementedError(_NEEDS_CONTRACT_MODEL.format(name="analyze_roll_yield"))
 
     def analyze_futures_curve(self, symbols: list[str]) -> pl.DataFrame:
-        """Cross-sectional curve by expiry — gated (needs contract expiries)."""
+        """Cross-sectional curve by expiry — gated. Use DatedFuturesAnalyzer.curve_as_of."""
         raise NotImplementedError(_NEEDS_CONTRACT_MODEL.format(name="analyze_futures_curve"))
 
     def calculate_implied_rates(

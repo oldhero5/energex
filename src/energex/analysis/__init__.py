@@ -1,5 +1,6 @@
 """Analysis modules for energy derivatives trading."""
 
+from energex.analysis.dated_futures import DatedFuturesAnalyzer
 from energex.analysis.futures import FuturesAnalyzer
 from energex.analysis.quality import DataQualityChecker
 from energex.analysis.volatility import VolatilityAnalyzer
@@ -32,6 +33,7 @@ __all__ = [
     "DataQualityChecker",
     "VolatilityAnalyzer",
     "FuturesAnalyzer",
+    "DatedFuturesAnalyzer",
     "MarketSentimentAnalyzer",
     "check_sentiment_available",
 ]
