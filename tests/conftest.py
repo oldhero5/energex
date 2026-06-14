@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 
 import polars as pl
 import pytest
@@ -31,6 +31,46 @@ def sample_ohlcv() -> pl.DataFrame:
                     "Volume": 1000 + i * 10,
                 }
             )
+    return pl.DataFrame(rows)
+
+
+@pytest.fixture
+def sample_daily_contracts() -> pl.DataFrame:
+    """Dated-contract daily settlements for two commodities over two snapshot days.
+
+    ``crude`` is backwardated (near > far); ``gas`` is contango (near < far). Datetimes
+    are tz-aware UTC; ContractMonth is the first of the delivery month.
+    """
+    rows = []
+    snapshots = [
+        datetime(2024, 1, 2, 0, 0, tzinfo=timezone.utc),
+        datetime(2024, 1, 3, 0, 0, tzinfo=timezone.utc),
+    ]
+    # (commodity, root, base price, per-month step) — negative step = backwardation.
+    specs = [
+        ("crude", "CL", 80.0, -0.5),
+        ("gas", "NG", 2.0, 0.05),
+    ]
+    month_codes = "FGHJKMNQUVXZ"
+    for snap_i, snap in enumerate(snapshots):
+        for commodity, root, base, step in specs:
+            for m in range(6):
+                contract_month = date(2024, 2 + m, 1)
+                close = base + step * m + snap_i * 0.1
+                rows.append(
+                    {
+                        "Datetime": snap,
+                        "Commodity": commodity,
+                        "ContractMonth": contract_month,
+                        "Symbol": f"{root}{month_codes[1 + m]}24.NYM",
+                        "Open": close - 0.1,
+                        "High": close + 0.2,
+                        "Low": close - 0.2,
+                        "Close": close,
+                        "Volume": 1000 + m * 10,
+                        "OpenInterest": 5000 + m * 100,
+                    }
+                )
     return pl.DataFrame(rows)
 
 

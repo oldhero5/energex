@@ -7,6 +7,7 @@ Energy derivatives data collection and analysis system with advanced analytics f
 ### Data Collection
 - Real-time intraday data fetching (1-minute intervals)
 - Support for major energy futures contracts (CL=F, BZ=F, NG=F)
+- Dated futures contract curves: the forward strip of monthly contracts per commodity (daily settlements), enabling real term-structure analytics
 - Efficient storage using DuckDB
 - Robust error handling and validation
 
@@ -27,6 +28,12 @@ Energy derivatives data collection and analysis system with advanced analytics f
   - Roll yield calculations
   - Basis risk measurement
   - Implied interest rates
+
+- **Dated Futures Curves** (`DatedFuturesAnalyzer`):
+  - Forward curve as of a date (Close + days-to-maturity per contract month)
+  - Annualized term-structure slope
+  - Per-adjacent-pair annualized roll yield
+  - Curve shape classification (backwardation / contango / flat)
 
 - **Market Sentiment Analysis** ✨ *New in v0.3.0*:
   - AI-powered news sentiment analysis

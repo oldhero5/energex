@@ -1,14 +1,33 @@
 """Tests for ingestion resilience: retries, error classification, logging (R10)."""
 
 import logging
+from datetime import date
 
 import pandas as pd
 import polars as pl
 import pytest
 
 from energex import data_fetcher as df_mod
-from energex.data_fetcher import EnergyDataFetcher
+from energex.data_fetcher import MONTH_CODES, EnergyDataFetcher, _dated_tickers
 from energex.exceptions import DataFetchError
+
+
+def test_dated_tickers_count_codes_and_months():
+    out = _dated_tickers("CL", date(2024, 1, 15), 12)
+    assert len(out) == 12
+    # First contract: January code 'F', year 24, first of month.
+    assert out[0] == ("CLF24.NYM", date(2024, 1, 1))
+    # Codes follow F G H J K M N Q U V X Z over the year.
+    assert [t[0][2] for t in out] == list(MONTH_CODES)
+    assert [t[1] for t in out] == [date(2024, m, 1) for m in range(1, 13)]
+
+
+def test_dated_tickers_year_rollover():
+    out = _dated_tickers("NG", date(2024, 11, 1), 3)
+    assert out[0] == ("NGX24.NYM", date(2024, 11, 1))
+    assert out[1] == ("NGZ24.NYM", date(2024, 12, 1))
+    # Rolls into the next year with the January code.
+    assert out[2] == ("NGF25.NYM", date(2025, 1, 1))
 
 
 @pytest.fixture(autouse=True)
