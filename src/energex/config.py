@@ -85,6 +85,15 @@ class DataFetchConfig(BaseSettings):
 
     yfinance_timeout: int = Field(default=30, description="Yahoo Finance timeout in seconds")
     data_fetch_retries: int = Field(default=3, description="Number of download attempts", ge=0)
+    dated_enabled: bool = Field(
+        default=True, description="Enable ingestion of the dated futures contract strip"
+    )
+    dated_lookback_days: int = Field(
+        default=45, description="Daily-bar lookback window per dated contract", ge=1
+    )
+    dated_contract_count: int = Field(
+        default=12, description="Number of forward monthly contracts to fetch per commodity", ge=1
+    )
 
     model_config = SettingsConfigDict(env_prefix="DATAFETCH_", case_sensitive=False)
 

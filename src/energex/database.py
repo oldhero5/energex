@@ -24,6 +24,20 @@ class EnergyDatabase:
     #: Canonical column order for the ``intraday_prices`` table.
     COLUMNS = ("Datetime", "Symbol", "Open", "High", "Low", "Close", "Volume")
 
+    #: Canonical column order for the ``daily_contracts`` table (dated contract strip).
+    DAILY_CONTRACTS_COLUMNS = (
+        "Datetime",
+        "Commodity",
+        "ContractMonth",
+        "Symbol",
+        "Open",
+        "High",
+        "Low",
+        "Close",
+        "Volume",
+        "OpenInterest",
+    )
+
     def __init__(self, db_path: str | None = None, read_only: bool = False):
         # Resolve the path from configuration (ENERGEX_DB_PATH) when not given.
         if db_path is None:
@@ -45,7 +59,7 @@ class EnergyDatabase:
             self._migrate_to_timestamptz()
 
     def _init_tables(self) -> None:
-        """Create the intraday_prices table if it does not already exist (idempotent)."""
+        """Create the storage tables if they do not already exist (idempotent)."""
         self.conn.execute("""
             CREATE TABLE IF NOT EXISTS intraday_prices (
                 Datetime TIMESTAMPTZ,
@@ -56,6 +70,21 @@ class EnergyDatabase:
                 Close DOUBLE,
                 Volume BIGINT,
                 CONSTRAINT pk_intraday PRIMARY KEY (Symbol, Datetime)
+            )
+        """)
+        self.conn.execute("""
+            CREATE TABLE IF NOT EXISTS daily_contracts (
+                Datetime TIMESTAMPTZ,
+                Commodity VARCHAR,
+                ContractMonth DATE,
+                Symbol VARCHAR,
+                Open DOUBLE,
+                High DOUBLE,
+                Low DOUBLE,
+                Close DOUBLE,
+                Volume BIGINT,
+                OpenInterest BIGINT,
+                CONSTRAINT pk_daily_contracts PRIMARY KEY (Commodity, ContractMonth, Datetime)
             )
         """)
 
@@ -99,10 +128,11 @@ class EnergyDatabase:
             raise
 
     def reset(self) -> None:
-        """Drop and recreate the table. Destructive — for explicit bootstrap only."""
+        """Drop and recreate the tables. Destructive — for explicit bootstrap only."""
         if self.read_only:
             raise DatabaseError("Cannot reset a read-only database connection")
         self.conn.execute("DROP TABLE IF EXISTS intraday_prices")
+        self.conn.execute("DROP TABLE IF EXISTS daily_contracts")
         self._init_tables()
 
     def insert_intraday_data(self, df: pl.DataFrame) -> None:
@@ -139,6 +169,46 @@ class EnergyDatabase:
         except Exception as e:
             self.conn.execute("ROLLBACK")
             logger.error("Error inserting data: %s", e)
+            raise
+
+    def insert_daily_contracts(self, df: pl.DataFrame) -> None:
+        """Idempotently upsert dated-contract daily bars keyed by
+        (Commodity, ContractMonth, Datetime)."""
+        if df.is_empty():
+            logger.info("No daily contracts to insert")
+            return
+
+        missing = [c for c in self.DAILY_CONTRACTS_COLUMNS if c not in df.columns]
+        if missing:
+            raise DatabaseError(
+                f"DataFrame is missing required columns {missing}; got {df.columns}"
+            )
+
+        # Select named columns in canonical order so the INSERT never binds positionally.
+        df = df.select(self.DAILY_CONTRACTS_COLUMNS)
+
+        try:
+            self.conn.execute("BEGIN TRANSACTION")
+            self.conn.execute("""
+                INSERT INTO daily_contracts
+                    (Datetime, Commodity, ContractMonth, Symbol,
+                     Open, High, Low, Close, Volume, OpenInterest)
+                SELECT Datetime, Commodity, ContractMonth, Symbol,
+                       Open, High, Low, Close, Volume, OpenInterest FROM df
+                ON CONFLICT (Commodity, ContractMonth, Datetime) DO UPDATE SET
+                    Symbol = excluded.Symbol,
+                    Open = excluded.Open,
+                    High = excluded.High,
+                    Low = excluded.Low,
+                    Close = excluded.Close,
+                    Volume = excluded.Volume,
+                    OpenInterest = excluded.OpenInterest
+            """)
+            self.conn.execute("COMMIT")
+            logger.info("Upserted %d daily contract rows", len(df))
+        except Exception as e:
+            self.conn.execute("ROLLBACK")
+            logger.error("Error inserting daily contracts: %s", e)
             raise
 
     def query(self, sql: str, params: list[Any] | None = None) -> pl.DataFrame:
