@@ -141,7 +141,8 @@ def commit_vintage(lib, symbol, frame, *, as_of, source, source_url, fetched_at,
         return _version_for(idx, a)  # IDEMPOTENT NO-OP: never re-mutate a live vintage
     cframe = _canonicalize(frame, as_of, source, source_url, fetched_at, reconstructed)
     if mode == "bitemporal_merge":
-        raise NotImplementedError("bitemporal_merge arrives in Task 3")
+        prior = _read_full_series_before(lib, symbol, idx, a)
+        cframe = _merge_revisions(prior, cframe)
     v = lib.write(
         symbol,
         cframe,
@@ -157,6 +158,23 @@ def commit_vintage(lib, symbol, frame, *, as_of, source, source_url, fetched_at,
     except Exception:
         pass
     return int(v)
+
+
+def _read_full_series_before(lib, symbol, idx, a):
+    """Full as-known series before this release (Task 4 makes this as_of-aware)."""
+    if not idx:
+        return None
+    e = max(idx, key=lambda x: x.as_of)
+    return lib.read(symbol, as_of=int(e.version)).data
+
+
+def _merge_revisions(prior, frame):
+    """Revisions overwrite by valid_time window (Task 8 makes this gap-safe)."""
+    if prior is None or prior.empty:
+        return frame
+    lo, hi = frame.index.min(), frame.index.max()
+    kept = prior[(prior.index < lo) | (prior.index > hi)]
+    return pd.concat([kept, frame]).sort_index()
 
 
 def read_as_of(lib, symbol, *, as_of=None, date_range=None):
