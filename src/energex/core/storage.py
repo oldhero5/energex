@@ -123,6 +123,13 @@ def _latest_version(lib, symbol) -> int:
     return max(k.version for k in lib.list_versions(symbol))
 
 
+def _latest_committed_version(idx):
+    """Latest COMMITTED vintage (by as_of); None if nothing is committed yet."""
+    if not idx:
+        return None
+    return max(idx, key=lambda e: e.as_of).version
+
+
 def _empty_like(lib, symbol, idx):
     if not idx:
         return pd.DataFrame()
@@ -186,7 +193,9 @@ def read_as_of(lib, symbol, *, as_of=None, date_range=None):
         return df
     idx = _read_vintage_index(lib, symbol)  # re-read every correctness-critical call
     if as_of is None:
-        v = _latest_version(lib, symbol)  # TASK 5 hardens this to committed-only
+        v = _latest_committed_version(idx)  # never an orphan write version
+        if v is None:
+            return _empty_like(lib, symbol, idx)
     else:
         a = _naive_utc(as_of)
         earlier = [e for e in idx if e.as_of <= a]
