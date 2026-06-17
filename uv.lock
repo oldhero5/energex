@@ -630,6 +630,7 @@ all = [
     { name = "isort" },
     { name = "mypy" },
     { name = "neo4j" },
+    { name = "numpy" },
     { name = "openai" },
     { name = "pandas" },
     { name = "pandera" },
@@ -666,6 +667,7 @@ orchestration = [
     { name = "dagster-webserver" },
 ]
 quality = [
+    { name = "numpy" },
     { name = "pandera" },
 ]
 sentiment = [
@@ -713,6 +715,7 @@ requires-dist = [
     { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.0.0" },
     { name = "neo4j", marker = "extra == 'graph'", specifier = ">=5.20.0" },
     { name = "numpy", specifier = ">=1.24.0" },
+    { name = "numpy", marker = "extra == 'quality'", specifier = ">=1.24.0" },
     { name = "openai", marker = "extra == 'llm'", specifier = ">=1.10.0" },
     { name = "pandas", marker = "extra == 'storage'", specifier = ">=2.0" },
     { name = "pandera", marker = "extra == 'quality'", specifier = ">=0.20.0" },

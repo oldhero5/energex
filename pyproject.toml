@@ -74,7 +74,8 @@ storage = [
 ]
 
 quality = [
-    "pandera>=0.20.0"
+    "pandera>=0.20.0",
+    "numpy>=1.24.0"
 ]
 
 graph = [
