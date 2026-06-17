@@ -13,6 +13,18 @@ _TABLE: dict[str, tuple[str, str, str]] = {
     "EIA.NG.STORAGE.LOWER48": ("fundamentals.eia", "ng_storage_lower48", "bitemporal_merge"),
     "EIA.PET.CRUDE.STOCKS": ("fundamentals.eia", "pet_crude_stocks", "bitemporal_merge"),
     "ERCOT.DALMP.HB_HOUSTON": ("prices.power", "dalmp_hb_houston", "bitemporal_merge"),
+    # NOAA nClimDiv monthly degree days: one combined HDD+CDD instrument per region
+    # (contiguous-US national aggregate, the nine NCEI climate regions, and Texas).
+    "NOAA.HDD.CONUS": ("weather", "hdd_conus", "bitemporal_replace"),
+    "NOAA.HDD.NORTHEAST": ("weather", "hdd_northeast", "bitemporal_replace"),
+    "NOAA.HDD.ENCENTRAL": ("weather", "hdd_encentral", "bitemporal_replace"),
+    "NOAA.HDD.CENTRAL": ("weather", "hdd_central", "bitemporal_replace"),
+    "NOAA.HDD.SOUTHEAST": ("weather", "hdd_southeast", "bitemporal_replace"),
+    "NOAA.HDD.WNCENTRAL": ("weather", "hdd_wncentral", "bitemporal_replace"),
+    "NOAA.HDD.SOUTH": ("weather", "hdd_south", "bitemporal_replace"),
+    "NOAA.HDD.SOUTHWEST": ("weather", "hdd_southwest", "bitemporal_replace"),
+    "NOAA.HDD.NORTHWEST": ("weather", "hdd_northwest", "bitemporal_replace"),
+    "NOAA.HDD.WEST": ("weather", "hdd_west", "bitemporal_replace"),
     "NOAA.HDD.TEXAS": ("weather", "hdd_texas", "bitemporal_replace"),
     "CME.CL.FRONT": ("prices.intraday", "CL_FRONT", "degenerate"),
     "CME.BZ.FRONT": ("prices.intraday", "BZ_FRONT", "degenerate"),

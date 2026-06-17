@@ -11,11 +11,18 @@ from typing import Any
 import dagster as dg
 
 from energex.core import quality, schemas, storage, symbology
+from energex.core.connectors.weather import NOAANClimDivConnector
 from energex.core.connectors.yfinance import YFinanceIntradayConnector
+from energex.orchestration.partitions import NOAA_MONTHLY
 from energex.orchestration.resources import ArcticDBResource
 
 INTRADAY_LIBRARY = "prices.intraday"
 _LOOKBACK_DAYS = 2  # well within yfinance's ~7-day 1m cap
+
+NOAA_LIBRARY = "weather"
+# Whole-file replace source: a partition older than this lag is a backfill of today's
+# already-revised file (reconstructed baseline), not a true forward vintage (spec §5.6).
+_NOAA_LIVE_GRACE = timedelta(days=70)
 
 
 @dg.asset(
@@ -65,4 +72,71 @@ def intraday_futures_bars(
     )
 
 
-ASSETS: list[Any] = [intraday_futures_bars]
+def _noaa_knowledge_time(context: dg.AssetExecutionContext) -> tuple[datetime, bool]:
+    """(as_of, reconstructed) for a NOAA partition. as_of = knowledge time = run time;
+    reconstructed=True when the partition's month closed long enough ago that we are
+    backfilling today's already-revised file rather than capturing a fresh release."""
+    fetched_at = datetime.now(timezone.utc)
+    window_end = context.partition_time_window.end  # tz-aware UTC next-month start
+    reconstructed = (fetched_at - window_end) > _NOAA_LIVE_GRACE
+    return fetched_at, reconstructed
+
+
+@dg.asset(
+    name="noaa_degree_days",
+    group_name="weather",
+    compute_kind="arcticdb",
+    partitions_def=NOAA_MONTHLY,
+    description=(
+        "Monthly NOAA nClimDiv HDD+CDD by region (contiguous-US national + nine NCEI "
+        "climate regions + Texas) -> weather (bitemporal_replace, whole-file vintage)."
+    ),
+)
+def noaa_degree_days(
+    context: dg.AssetExecutionContext, arctic: ArcticDBResource
+) -> dg.MaterializeResult:
+    as_of, reconstructed = _noaa_knowledge_time(context)
+    window = context.partition_time_window
+    result = NOAANClimDivConnector().fetch(window.start.date(), window.end.date())
+
+    # SINGLE-SOURCED gate: the same core.quality.validate the asset_check re-runs.
+    frame = quality.validate(result.frame, schemas.NOAA_HDDCDD, as_of=as_of)
+
+    lib = arctic.get_library(NOAA_LIBRARY)
+    versions: dict[str, int] = {}
+    rows_by_symbol: dict[str, int] = {}
+    for instrument_id, group in frame.groupby("instrument_id", sort=True):
+        library, symbol = symbology.resolve(str(instrument_id))
+        if library != NOAA_LIBRARY:
+            raise ValueError(f"{instrument_id} routes to {library!r}, not {NOAA_LIBRARY!r}")
+        versions[symbol] = storage.commit_vintage(
+            lib,
+            symbol,
+            group,
+            as_of=as_of,
+            source=result.source,
+            source_url=result.source_url,
+            fetched_at=result.fetched_at,
+            mode=symbology.revision_mode(str(instrument_id)),
+            reconstructed=reconstructed,
+        )
+        rows_by_symbol[symbol] = int(len(group))
+
+    context.log.info("committed %d region-months across %s", len(frame), sorted(versions))
+    return dg.MaterializeResult(
+        metadata={
+            "source": result.source,
+            "source_url": dg.MetadataValue.url(result.source_url),
+            "fetched_at": result.fetched_at.isoformat(),
+            "as_of": as_of.isoformat(),
+            "vintage_reconstructed": bool(reconstructed),
+            "library": NOAA_LIBRARY,
+            "symbols": dg.MetadataValue.json(sorted(versions)),
+            "versions": dg.MetadataValue.json(versions),
+            "rows_total": int(len(frame)),
+            "rows_by_symbol": dg.MetadataValue.json(rows_by_symbol),
+        }
+    )
+
+
+ASSETS: list[Any] = [intraday_futures_bars, noaa_degree_days]

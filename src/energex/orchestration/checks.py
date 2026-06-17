@@ -15,9 +15,10 @@ import dagster as dg
 import pandas as pd
 
 from energex.core import quality, schemas, storage, symbology
+from energex.core.connectors.weather import INSTRUMENT_IDS as NOAA_INSTRUMENT_IDS
 from energex.core.connectors.yfinance import INSTRUMENT_IDS
 from energex.core.exceptions import QualityGateError
-from energex.orchestration.assets import INTRADAY_LIBRARY
+from energex.orchestration.assets import INTRADAY_LIBRARY, NOAA_LIBRARY
 from energex.orchestration.resources import ArcticDBResource
 
 
@@ -61,4 +62,44 @@ def intraday_bars_pass_quality_gate(arctic: ArcticDBResource) -> dg.AssetCheckRe
     )
 
 
-CHECKS: list[Any] = [intraday_bars_pass_quality_gate]
+@dg.asset_check(
+    asset="noaa_degree_days",
+    name="noaa_degree_days_pass_quality_gate",
+    description="Read-back degree days from the weather library re-pass the NOAA_HDDCDD gate.",
+)
+def noaa_degree_days_pass_quality_gate(arctic: ArcticDBResource) -> dg.AssetCheckResult:
+    lib = arctic.get_library(NOAA_LIBRARY)
+    frames: list[pd.DataFrame] = []
+    for instrument_id in NOAA_INSTRUMENT_IDS:
+        _library, symbol = symbology.resolve(instrument_id)
+        if not lib.has_symbol(symbol):
+            continue
+        df = storage.read_as_of(lib, symbol)
+        if not df.empty:
+            frames.append(df)
+
+    if not frames:
+        return dg.AssetCheckResult(
+            passed=False, metadata={"reason": "no degree days found in weather library"}
+        )
+
+    frame = pd.concat(frames, ignore_index=True)
+    frame["valid_time"] = pd.to_datetime(frame["valid_time"], utc=True)  # Arctic stripped tz
+    try:
+        validated = quality.validate(frame, schemas.NOAA_HDDCDD, as_of=datetime.now(timezone.utc))
+    except QualityGateError as exc:
+        return dg.AssetCheckResult(
+            passed=False,
+            metadata={"schema": exc.schema_name, "failures": int(len(exc.failures))},
+        )
+
+    return dg.AssetCheckResult(
+        passed=True,
+        metadata={
+            "rows": int(len(validated)),
+            "symbols": dg.MetadataValue.json(sorted(validated["instrument_id"].unique().tolist())),
+        },
+    )
+
+
+CHECKS: list[Any] = [intraday_bars_pass_quality_gate, noaa_degree_days_pass_quality_gate]
