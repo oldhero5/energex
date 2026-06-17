@@ -161,10 +161,11 @@ def commit_vintage(lib, symbol, frame, *, as_of, source, source_url, fetched_at,
 
 
 def _read_full_series_before(lib, symbol, idx, a):
-    """Full as-known series before this release (Task 4 makes this as_of-aware)."""
-    if not idx:
+    """Full as-known series committed STRICTLY BEFORE this as_of (no future leak)."""
+    earlier = [e for e in idx if e.as_of < a]
+    if not earlier:
         return None
-    e = max(idx, key=lambda x: x.as_of)
+    e = max(earlier, key=lambda x: x.as_of)
     return lib.read(symbol, as_of=int(e.version)).data
 
 
