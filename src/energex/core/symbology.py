@@ -15,6 +15,8 @@ _TABLE: dict[str, tuple[str, str, str]] = {
     "ERCOT.DALMP.HB_HOUSTON": ("prices.power", "dalmp_hb_houston", "bitemporal_merge"),
     "NOAA.HDD.TEXAS": ("weather", "hdd_texas", "bitemporal_replace"),
     "CME.CL.FRONT": ("prices.intraday", "CL_FRONT", "degenerate"),
+    "CME.BZ.FRONT": ("prices.intraday", "BZ_FRONT", "degenerate"),
+    "CME.NG.FRONT": ("prices.intraday", "NG_FRONT", "degenerate"),
     "CME.CL.CLF26": ("prices.futures", "CL_CLF26", "bitemporal_merge"),
     "CME.CL.CLG26": ("prices.futures", "CL_CLG26", "bitemporal_merge"),
 }
