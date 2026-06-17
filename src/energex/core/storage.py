@@ -1,0 +1,190 @@
+"""ArcticDB bitemporal storage layer + version-index commit protocol (S1 crown jewel).
+
+Three revision modes (chosen via symbology):
+  - degenerate        : never-revised bars; write_bars append-with-dedup, no vintage index.
+  - bitemporal_replace: every release is a COMPLETE as-known series; full write.
+  - bitemporal_merge  : every release revises a window inline; read-modify-write merge.
+
+Vintage addressing is an append-only per-symbol sidecar index ({symbol}__vintages)
+read by ArcticDB INTEGER version. The index append is the atomic COMMIT POINT; a crash
+between data-write and index-append leaves an orphan data version cleaned by reconcile_orphans.
+"""
+
+from __future__ import annotations
+
+# arcticdb MUST be imported before pandas/pyarrow (phase0 findings: AWS-SDK symbol
+# collision aborts the process on macOS otherwise).
+import arcticdb  # noqa: F401
+
+import os
+from collections import namedtuple
+
+import pandas as pd
+import polars as pl
+
+from energex.core import symbology
+from energex.core.exceptions import StorageError
+
+VINTAGE_COLS = ("as_of", "version", "fetched_at", "vintage_reconstructed")
+VintageEntry = namedtuple("VintageEntry", VINTAGE_COLS)
+
+
+# ---------------------------------------------------------------- time helpers
+def _naive_utc(ts) -> pd.Timestamp:
+    """Any datetime-like -> tz-naive UTC pd.Timestamp (ArcticDB strips tz on store)."""
+    t = pd.Timestamp(ts)
+    if t.tzinfo is not None:
+        t = t.tz_convert("UTC").tz_localize(None)
+    return t
+
+
+def _naive(date_range):
+    if date_range is None:
+        return None
+    lo, hi = date_range
+    return (
+        _naive_utc(lo) if lo is not None else None,
+        _naive_utc(hi) if hi is not None else None,
+    )
+
+
+# ---------------------------------------------------------------- canonical frame
+def _canonicalize(frame, as_of, source, source_url, fetched_at, reconstructed=False):
+    """tz-aware-UTC -> tz-naive-UTC DatetimeIndex named 'Datetime', sorted+unique, + provenance."""
+    if "valid_time" not in frame.columns:
+        raise StorageError("frame is missing required column 'valid_time'")
+    df = frame.copy()
+    vt = pd.to_datetime(df["valid_time"], utc=True)
+    df["valid_time"] = vt.dt.tz_convert("UTC").dt.tz_localize(None)
+    if "ContractMonth" in df.columns:
+        # pandas has no date dtype -> store as datetime64 (re-cast to pl.Date on read).
+        df["ContractMonth"] = pd.to_datetime(df["ContractMonth"])
+    df.index = pd.DatetimeIndex(df["valid_time"].to_numpy(), name="Datetime")
+    df = df.sort_index()
+    df = df[~df.index.duplicated(keep="last")]
+    df["as_of"] = _naive_utc(as_of)
+    df["source"] = source
+    df["source_url"] = source_url
+    df["fetched_at"] = _naive_utc(fetched_at)
+    df["vintage_reconstructed"] = bool(reconstructed)
+    return df
+
+
+# ---------------------------------------------------------------- vintage index
+def _vintage_symbol(symbol: str) -> str:
+    return f"{symbol}__vintages"
+
+
+def _read_vintage_index(lib, symbol):
+    sym = _vintage_symbol(symbol)
+    if not lib.has_symbol(sym):
+        return []
+    df = lib.read(sym).data
+    out = []
+    for r in df.itertuples(index=False):
+        out.append(
+            VintageEntry(
+                _naive_utc(r.as_of),
+                int(r.version),
+                _naive_utc(r.fetched_at),
+                bool(r.vintage_reconstructed),
+            )
+        )
+    return out
+
+
+def _append_vintage_index(lib, symbol, *, as_of, version, fetched_at, vintage_reconstructed):
+    sym = _vintage_symbol(symbol)
+    row = pd.DataFrame(
+        [
+            {
+                "as_of": _naive_utc(as_of),
+                "version": int(version),
+                "fetched_at": _naive_utc(fetched_at),
+                "vintage_reconstructed": bool(vintage_reconstructed),
+            }
+        ]
+    )
+    if lib.has_symbol(sym):
+        out = pd.concat([lib.read(sym).data, row], ignore_index=True)
+    else:
+        out = row
+    lib.write(sym, out)  # atomic per-symbol write = the COMMIT POINT
+
+
+def _version_for(idx, a):
+    for e in idx:
+        if e.as_of == a:
+            return e.version
+    raise StorageError(f"no committed vintage with as_of {a}")
+
+
+def _latest_version(lib, symbol) -> int:
+    return max(k.version for k in lib.list_versions(symbol))
+
+
+def _empty_like(lib, symbol, idx):
+    if not idx:
+        return pd.DataFrame()
+    v = max(idx, key=lambda e: e.version).version
+    return lib.read(symbol, as_of=int(v)).data.iloc[0:0]
+
+
+# ---------------------------------------------------------------- commit / read
+def commit_vintage(lib, symbol, frame, *, as_of, source, source_url, fetched_at,
+                   mode, reconstructed=False, force=False) -> int:
+    if mode not in ("bitemporal_merge", "bitemporal_replace"):
+        raise StorageError(f"commit_vintage cannot handle mode {mode!r}")
+    idx = _read_vintage_index(lib, symbol)
+    a = _naive_utc(as_of)
+    if not force and any(e.as_of == a for e in idx):
+        return _version_for(idx, a)  # IDEMPOTENT NO-OP: never re-mutate a live vintage
+    cframe = _canonicalize(frame, as_of, source, source_url, fetched_at, reconstructed)
+    if mode == "bitemporal_merge":
+        raise NotImplementedError("bitemporal_merge arrives in Task 3")
+    v = lib.write(
+        symbol,
+        cframe,
+        metadata={"as_of": str(a), "source": source, "vintage_reconstructed": bool(reconstructed)},
+        validate_index=True,
+    ).version
+    _append_vintage_index(
+        lib, symbol, as_of=a, version=v, fetched_at=fetched_at,
+        vintage_reconstructed=reconstructed,
+    )
+    try:  # UI-only convenience snapshot; correctness never depends on it.
+        lib.snapshot(f"{symbol}@{a:%Y-%m-%dT%H%M%SZ}", versions={symbol: int(v)})
+    except Exception:
+        pass
+    return int(v)
+
+
+def read_as_of(lib, symbol, *, as_of=None, date_range=None):
+    if symbology.mode_for_symbol(symbol) == "degenerate":
+        df = lib.read(symbol, date_range=_naive(date_range)).data
+        if as_of is not None:  # filter on KNOWLEDGE time, never valid_time
+            df = df[df["fetched_at"] <= _naive_utc(as_of)]
+        return df
+    idx = _read_vintage_index(lib, symbol)  # re-read every correctness-critical call
+    if as_of is None:
+        v = _latest_version(lib, symbol)  # TASK 5 hardens this to committed-only
+    else:
+        a = _naive_utc(as_of)
+        earlier = [e for e in idx if e.as_of <= a]
+        if not earlier:
+            return _empty_like(lib, symbol, idx)  # as_of < earliest => EMPTY
+        v = max(earlier, key=lambda e: e.as_of).version
+    return lib.read(symbol, as_of=int(v), date_range=_naive(date_range)).data
+
+
+# ---------------------------------------------------------------- polars seam
+def _to_polars(versioned_item) -> pl.DataFrame:
+    df = versioned_item.data.reset_index()  # DatetimeIndex 'Datetime' -> column
+    if "Datetime" in df.columns:
+        df["Datetime"] = df["Datetime"].dt.tz_localize("UTC")  # Arctic stripped tz
+    if "valid_time" in df.columns:
+        df["valid_time"] = df["valid_time"].dt.tz_localize("UTC")
+    pf = pl.from_pandas(df)
+    if "ContractMonth" in pf.columns:
+        pf = pf.with_columns(pl.col("ContractMonth").cast(pl.Date))
+    return pf
