@@ -177,11 +177,10 @@ def _read_full_series_before(lib, symbol, idx, a):
 
 
 def _merge_revisions(prior, frame):
-    """Revisions overwrite by valid_time window (Task 8 makes this gap-safe)."""
+    """Revisions overwrite by exact valid_time; prior rows absent from the frame survive."""
     if prior is None or prior.empty:
         return frame
-    lo, hi = frame.index.min(), frame.index.max()
-    kept = prior[(prior.index < lo) | (prior.index > hi)]
+    kept = prior[~prior.index.isin(frame.index)]
     return pd.concat([kept, frame]).sort_index()
 
 
