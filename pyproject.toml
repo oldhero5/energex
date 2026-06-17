@@ -26,7 +26,9 @@ dependencies = [
     "requests>=2.31.0",
     "python-dotenv>=1.0.0",
     "pydantic>=2.5.0",
-    "pydantic-settings>=2.1.0"
+    "pydantic-settings>=2.1.0",
+    "httpx>=0.26.0",
+    "tenacity>=8.2.0"
 ]
 
 [project.optional-dependencies]
@@ -34,6 +36,7 @@ dev = [
     "pytest>=7.0.0",
     "pytest-cov>=4.1.0",
     "pytest-mock>=3.12.0",
+    "respx>=0.20.0",
     "black>=23.0.0",
     "isort>=5.0.0",
     "mypy>=1.0.0",
@@ -59,11 +62,33 @@ service = [
     "apscheduler>=3.10.0,<4.0.0"
 ]
 
+orchestration = [
+    "dagster>=1.13.9,<1.14.0",
+    "dagster-webserver>=1.13.9,<1.14.0",
+    "dagster-postgres>=0.29.9,<0.30.0"
+]
+
+storage = [
+    "arcticdb>=6.18.1,<7.0.0"
+]
+
+quality = [
+    "pandera>=0.20.0"
+]
+
+graph = [
+    "neo4j>=5.20.0"
+]
+
 all = [
     "energex[dev]",
     "energex[llm]",
     "energex[sentiment]",
-    "energex[service]"
+    "energex[service]",
+    "energex[orchestration]",
+    "energex[storage]",
+    "energex[quality]",
+    "energex[graph]"
 ]
 
 [build-system]
@@ -112,6 +137,10 @@ module = [
     "pytz",
     "requests.*",
     "apscheduler.*",
+    "arcticdb.*",
+    "dagster.*",
+    "pandera.*",
+    "neo4j.*",
 ]
 ignore_missing_imports = true
 
