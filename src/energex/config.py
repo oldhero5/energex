@@ -46,8 +46,10 @@ class NewsConfig(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="", case_sensitive=False)
 
 
-class DatabaseConfig(BaseSettings):
-    """Database configuration."""
+class LegacyDuckDBConfig(BaseSettings):
+    """Legacy DuckDB path config (read path / existing tests). Reached via the
+    `settings.database` property alias; preserved while core config grows
+    ArcticDB/Neo4j/Connector sections in S1 phase 1."""
 
     db_path: Path = Field(default=Path("energy.db"), description="Path to DuckDB database")
 
@@ -117,7 +119,7 @@ class EnergexSettings(BaseSettings):
     # Sub-configurations
     llm: LLMConfig = Field(default_factory=LLMConfig)
     news: NewsConfig = Field(default_factory=NewsConfig)
-    database: DatabaseConfig = Field(default_factory=DatabaseConfig)
+    legacy_db: LegacyDuckDBConfig = Field(default_factory=LegacyDuckDBConfig)
     logging: LoggingConfig = Field(default_factory=LoggingConfig)
     data_fetch: DataFetchConfig = Field(default_factory=DataFetchConfig)
     analysis: AnalysisConfig = Field(default_factory=AnalysisConfig)
@@ -157,6 +159,13 @@ class EnergexSettings(BaseSettings):
             self.llm.api_key = self.anthropic_api_key
         elif self.llm.provider == "ollama" and self.ollama_base_url is not None:
             self.llm.base_url = self.ollama_base_url
+
+    @property
+    def database(self) -> LegacyDuckDBConfig:
+        """Back-compat alias preserving `settings.database.db_path`. Kept as a
+        property (not a field) so future core config sections can be added
+        alongside it without changing this read path."""
+        return self.legacy_db
 
 
 # Singleton pattern for settings
