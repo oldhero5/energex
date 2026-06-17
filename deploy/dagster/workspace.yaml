@@ -1,0 +1,6 @@
+# Loaded by webserver/daemon. energex.orchestration.definitions is created in S1 phase 1;
+# this file is config-only and is not imported by `docker compose config`.
+load_from:
+  - python_module:
+      module_name: energex.orchestration.definitions
+      working_directory: /opt/dagster/app
