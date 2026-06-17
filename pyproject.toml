@@ -69,7 +69,8 @@ orchestration = [
 ]
 
 storage = [
-    "arcticdb>=6.18.1,<7.0.0"
+    "arcticdb>=6.18.1,<7.0.0",
+    "pandas>=2.0"
 ]
 
 quality = [
