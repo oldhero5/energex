@@ -72,6 +72,21 @@ jobs:
           tests/test_latest_is_committed.py
           tests/test_symbology.py
 
+  quality-gate:
+    name: Pandera quality gate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      - name: Pre-write quality-gate suite (pandera schemas)
+        run: >
+          uv run --extra quality --extra dev pytest -q
+          tests/test_pandera_schemas.py
+          tests/test_quality_collision.py
+          tests/test_exceptions.py
+
   secrets:
     name: Secret scan (gitleaks)
     runs-on: ubuntu-latest
