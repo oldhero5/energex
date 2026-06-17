@@ -116,15 +116,9 @@ class AnalysisConfig(BaseSettings):
 class ArcticDBConfig(BaseSettings):
     """ArcticDB-on-MinIO storage config (env: MINIO_* / ARCTIC_*)."""
 
-    minio_endpoint: str = Field(
-        default="localhost:9000", validation_alias="MINIO_ENDPOINT"
-    )
-    minio_access_key: SecretStr | None = Field(
-        default=None, validation_alias="MINIO_ACCESS_KEY"
-    )
-    minio_secret_key: SecretStr | None = Field(
-        default=None, validation_alias="MINIO_SECRET_KEY"
-    )
+    minio_endpoint: str = Field(default="localhost:9000", validation_alias="MINIO_ENDPOINT")
+    minio_access_key: SecretStr | None = Field(default=None, validation_alias="MINIO_ACCESS_KEY")
+    minio_secret_key: SecretStr | None = Field(default=None, validation_alias="MINIO_SECRET_KEY")
     minio_bucket: str = Field(default="arctic", validation_alias="ARCTIC_BUCKET")
     arctic_secure: bool = Field(default=False, validation_alias="ARCTIC_SECURE")
 
@@ -146,9 +140,7 @@ class ConnectorConfig(BaseSettings):
 
     eia_api_key: SecretStr | None = Field(default=None, validation_alias="EIA_API_KEY")
     ercot_username: str | None = Field(default=None, validation_alias="ERCOT_USERNAME")
-    ercot_password: SecretStr | None = Field(
-        default=None, validation_alias="ERCOT_PASSWORD"
-    )
+    ercot_password: SecretStr | None = Field(default=None, validation_alias="ERCOT_PASSWORD")
     ercot_subscription_key: SecretStr | None = Field(
         default=None, validation_alias="ERCOT_SUBSCRIPTION_KEY"
     )

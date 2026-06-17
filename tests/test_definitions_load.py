@@ -18,8 +18,15 @@ def test_definitions_builds():
 
 def test_dagster_definitions_validate_cli():
     result = subprocess.run(
-        ["uv", "run", "dagster", "definitions", "validate",
-         "-m", "energex.orchestration.definitions"],
+        [
+            "uv",
+            "run",
+            "dagster",
+            "definitions",
+            "validate",
+            "-m",
+            "energex.orchestration.definitions",
+        ],
         capture_output=True,
         text=True,
     )
