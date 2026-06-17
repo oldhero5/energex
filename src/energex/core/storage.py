@@ -248,3 +248,26 @@ def reconcile_orphans(lib, symbol) -> list[int]:
     for v in orphans:
         lib.delete(symbol, versions=int(v))  # committed versions carry snapshots; orphans do not
     return orphans
+
+
+# ---------------------------------------------------------------- curve assembler
+def _arctic():
+    import arcticdb as adb
+
+    return adb.Arctic(os.environ["ENERGEX_ARCTIC_URI"])
+
+
+def read_curve(commodity, as_of) -> pd.DataFrame:
+    ac = _arctic()
+    frames = []
+    for sym in symbology.contracts_for(commodity):
+        lib = ac[symbology.library_for_symbol(sym)]
+        frames.append(read_as_of(lib, sym, as_of=as_of))
+    return _reassemble_curve(frames)
+
+
+def _reassemble_curve(frames):
+    frames = [f for f in frames if f is not None and not f.empty]
+    if not frames:
+        return pd.DataFrame()
+    return pd.concat(frames).sort_index()
