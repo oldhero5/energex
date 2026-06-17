@@ -185,6 +185,28 @@ def _merge_revisions(prior, frame):
     return pd.concat([kept, frame]).sort_index()
 
 
+def write_bars(lib, symbol, frame, *, fetched_at) -> int:
+    """DEGENERATE append-with-dedup on the UTC index. Fast-path append when strictly
+    after the existing tail; otherwise read-concat-write (sparse interior inserts).
+    NEVER lib.update(date_range) — it would delete omitted bars."""
+    if symbology.mode_for_symbol(symbol) != "degenerate":
+        raise StorageError(f"write_bars refuses non-degenerate symbol {symbol!r}")
+    if "as_of" in frame.columns and frame["as_of"].nunique(dropna=False) > 1:
+        raise StorageError("write_bars frame carries multiple as_of values")
+    cframe = _canonicalize(frame, fetched_at, "", "", fetched_at, False)
+    if not lib.has_symbol(symbol):
+        return int(lib.write(symbol, cframe, validate_index=True).version)
+    existing = lib.read(symbol).data
+    new = cframe[~cframe.index.isin(existing.index)]
+    if len(new) == 0:
+        return _latest_version(lib, symbol)  # idempotent no-op
+    if new.index.min() > existing.index.max():
+        return int(lib.append(symbol, new, validate_index=True).version)
+    combined = pd.concat([existing, new])
+    combined = combined[~combined.index.duplicated(keep="last")].sort_index()
+    return int(lib.write(symbol, combined, validate_index=True).version)
+
+
 def read_as_of(lib, symbol, *, as_of=None, date_range=None):
     if symbology.mode_for_symbol(symbol) == "degenerate":
         df = lib.read(symbol, date_range=_naive(date_range)).data
