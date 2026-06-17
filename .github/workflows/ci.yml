@@ -52,6 +52,26 @@ jobs:
           enable-cache: true
       - run: uv run --all-extras --python ${{ matrix.python-version }} pytest
 
+  storage-gate:
+    name: Bitemporal storage gate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      - name: Bitemporal CI gate suite (offline LMDB ArcticDB)
+        run: >
+          uv run --extra storage --extra dev pytest -q
+          tests/test_storage_roundtrip.py
+          tests/test_storage_pointintime.py
+          tests/test_pointintime_reverse_backfill.py
+          tests/test_crash_safety.py
+          tests/test_write_bars_sparse.py
+          tests/test_revision_merge_gap.py
+          tests/test_latest_is_committed.py
+          tests/test_symbology.py
+
   secrets:
     name: Secret scan (gitleaks)
     runs-on: ubuntu-latest

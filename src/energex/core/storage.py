@@ -12,13 +12,12 @@ between data-write and index-append leaves an orphan data version cleaned by rec
 
 from __future__ import annotations
 
-# arcticdb MUST be imported before pandas/pyarrow (phase0 findings: AWS-SDK symbol
-# collision aborts the process on macOS otherwise).
-import arcticdb  # noqa: F401
-
 import os
 from collections import namedtuple
 
+# arcticdb MUST be imported before pandas/pyarrow (phase0 findings: AWS-SDK symbol
+# collision aborts the process on macOS otherwise).
+import arcticdb  # noqa: F401
 import pandas as pd
 import polars as pl
 
@@ -138,8 +137,19 @@ def _empty_like(lib, symbol, idx):
 
 
 # ---------------------------------------------------------------- commit / read
-def commit_vintage(lib, symbol, frame, *, as_of, source, source_url, fetched_at,
-                   mode, reconstructed=False, force=False) -> int:
+def commit_vintage(
+    lib,
+    symbol,
+    frame,
+    *,
+    as_of,
+    source,
+    source_url,
+    fetched_at,
+    mode,
+    reconstructed=False,
+    force=False,
+) -> int:
     if mode not in ("bitemporal_merge", "bitemporal_replace"):
         raise StorageError(f"commit_vintage cannot handle mode {mode!r}")
     idx = _read_vintage_index(lib, symbol)
@@ -157,7 +167,11 @@ def commit_vintage(lib, symbol, frame, *, as_of, source, source_url, fetched_at,
         validate_index=True,
     ).version
     _append_vintage_index(
-        lib, symbol, as_of=a, version=v, fetched_at=fetched_at,
+        lib,
+        symbol,
+        as_of=a,
+        version=v,
+        fetched_at=fetched_at,
         vintage_reconstructed=reconstructed,
     )
     try:  # UI-only convenience snapshot; correctness never depends on it.

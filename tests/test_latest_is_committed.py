@@ -14,16 +14,23 @@ A1 = datetime(2024, 1, 16, 15, 30, tzinfo=timezone.utc)
 
 def test_latest_is_committed(arctic_lib):
     storage.commit_vintage(
-        arctic_lib, "CL_CLF26",
+        arctic_lib,
+        "CL_CLF26",
         pd.DataFrame({"instrument_id": "CME.CL.CLF26", "valid_time": [D1], "Close": [10.0]}),
-        as_of=A1, source="yf", source_url="u", fetched_at=A1, mode="bitemporal_merge",
+        as_of=A1,
+        source="yf",
+        source_url="u",
+        fetched_at=A1,
+        mode="bitemporal_merge",
     )
     # Simulate a crash AFTER the data write but BEFORE the index append: a higher,
     # uncommitted data version exists (NOT in {symbol}__vintages).
     orphan = arctic_lib.write(
         "CL_CLF26",
-        pd.DataFrame({"Close": [999.0]},
-                     index=pd.DatetimeIndex([pd.Timestamp("2024-01-01")], name="Datetime")),
+        pd.DataFrame(
+            {"Close": [999.0]},
+            index=pd.DatetimeIndex([pd.Timestamp("2024-01-01")], name="Datetime"),
+        ),
         validate_index=True,
     ).version
     assert orphan > 0

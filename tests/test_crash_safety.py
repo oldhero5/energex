@@ -27,19 +27,33 @@ def _versions(lib, symbol):
 
 def test_crash_safety(arctic_lib):
     storage.commit_vintage(
-        arctic_lib, "CL_CLF26", _frame([D1], [10.0]),
-        as_of=E1, source="yf", source_url="u", fetched_at=E1, mode="bitemporal_merge",
+        arctic_lib,
+        "CL_CLF26",
+        _frame([D1], [10.0]),
+        as_of=E1,
+        source="yf",
+        source_url="u",
+        fetched_at=E1,
+        mode="bitemporal_merge",
     )
     storage.commit_vintage(
-        arctic_lib, "CL_CLF26", _frame([D1, D2], [10.0, 11.0]),
-        as_of=E2, source="yf", source_url="u", fetched_at=E2, mode="bitemporal_merge",
+        arctic_lib,
+        "CL_CLF26",
+        _frame([D1, D2], [10.0, 11.0]),
+        as_of=E2,
+        source="yf",
+        source_url="u",
+        fetched_at=E2,
+        mode="bitemporal_merge",
     )
 
     # CRASH: data version written, index append never happened.
     orphan = arctic_lib.write(
         "CL_CLF26",
-        pd.DataFrame({"Close": [999.0]},
-                     index=pd.DatetimeIndex([pd.Timestamp("2024-01-01")], name="Datetime")),
+        pd.DataFrame(
+            {"Close": [999.0]},
+            index=pd.DatetimeIndex([pd.Timestamp("2024-01-01")], name="Datetime"),
+        ),
         validate_index=True,
     ).version
 

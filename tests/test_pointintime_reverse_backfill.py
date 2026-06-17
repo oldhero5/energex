@@ -25,13 +25,25 @@ def _frame(times, values):
 def test_pointintime_reverse_backfill(arctic_lib):
     # Commit the LATER vintage first (carries the extra D4 row).
     storage.commit_vintage(
-        arctic_lib, "CL_CLF26", _frame([D2, D3, D4], [21.0, 22.0, 40.0]),
-        as_of=A2, source="yf", source_url="u", fetched_at=A2, mode="bitemporal_merge",
+        arctic_lib,
+        "CL_CLF26",
+        _frame([D2, D3, D4], [21.0, 22.0, 40.0]),
+        as_of=A2,
+        source="yf",
+        source_url="u",
+        fetched_at=A2,
+        mode="bitemporal_merge",
     )
     # Then backfill the EARLIER vintage (no D4).
     storage.commit_vintage(
-        arctic_lib, "CL_CLF26", _frame([D1, D2, D3], [10.0, 11.0, 12.0]),
-        as_of=A1, source="yf", source_url="u", fetched_at=A1, mode="bitemporal_merge",
+        arctic_lib,
+        "CL_CLF26",
+        _frame([D1, D2, D3], [10.0, 11.0, 12.0]),
+        as_of=A1,
+        source="yf",
+        source_url="u",
+        fetched_at=A1,
+        mode="bitemporal_merge",
     )
 
     early = storage.read_as_of(arctic_lib, "CL_CLF26", as_of=A1)
