@@ -216,3 +216,14 @@ def _to_polars(versioned_item) -> pl.DataFrame:
     if "ContractMonth" in pf.columns:
         pf = pf.with_columns(pl.col("ContractMonth").cast(pl.Date))
     return pf
+
+
+# ---------------------------------------------------------------- reconcile / GC
+def reconcile_orphans(lib, symbol) -> list[int]:
+    """Delete data versions with no committed index entry (crash residue). Returns removed."""
+    committed = {e.version for e in _read_vintage_index(lib, symbol)}
+    data_versions = {k.version for k in lib.list_versions(symbol) if k.symbol == symbol}
+    orphans = sorted(data_versions - committed)
+    for v in orphans:
+        lib.delete(symbol, versions=int(v))  # committed versions carry snapshots; orphans do not
+    return orphans
