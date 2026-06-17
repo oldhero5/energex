@@ -128,8 +128,8 @@ def test_fetch_retries_transient_failure():
     respx.get(BASE + HDD_FILE).mock(return_value=httpx.Response(200, text=_HDD_SAMPLE))
     respx.get(BASE + CDD_FILE).mock(return_value=httpx.Response(200, text=_CDD_SAMPLE))
 
-    frame = NOAANClimDivConnector(retries=3, timeout=5).fetch(
-        date(2026, 5, 1), date(2026, 6, 1)
-    ).frame
+    frame = (
+        NOAANClimDivConnector(retries=3, timeout=5).fetch(date(2026, 5, 1), date(2026, 6, 1)).frame
+    )
     assert calls["n"] == 2  # one retry then success
     assert len(frame) == 34
