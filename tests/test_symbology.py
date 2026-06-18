@@ -20,6 +20,9 @@ def test_resolve_revision_mode_and_symbol_lookups():
     assert symbology.resolve("CME.CL.CLF26") == ("prices.futures", "CL_CLF26")
     assert symbology.revision_mode("CME.CL.CLF26") == "bitemporal_merge"
     assert symbology.mode_for_symbol("CL_FRONT") == "degenerate"
+    assert symbology.resolve("FRED.WTI.SPOT") == ("prices.spot", "wti_spot")
+    assert symbology.revision_mode("FRED.HENRYHUB.SPOT") == "degenerate"
+    assert symbology.library_for_symbol("brent_spot") == "prices.spot"
     assert symbology.library_for_symbol("hdd_texas") == "weather"
     assert symbology.contracts_for("crude") == ["CL_CLF26", "CL_CLG26"]
 

@@ -26,6 +26,10 @@ _TABLE: dict[str, tuple[str, str, str]] = {
     "NOAA.HDD.NORTHWEST": ("weather", "hdd_northwest", "bitemporal_replace"),
     "NOAA.HDD.WEST": ("weather", "hdd_west", "bitemporal_replace"),
     "NOAA.HDD.TEXAS": ("weather", "hdd_texas", "bitemporal_replace"),
+    # FRED daily benchmark spot prices: final daily values (no vintage) -> degenerate.
+    "FRED.WTI.SPOT": ("prices.spot", "wti_spot", "degenerate"),
+    "FRED.BRENT.SPOT": ("prices.spot", "brent_spot", "degenerate"),
+    "FRED.HENRYHUB.SPOT": ("prices.spot", "henryhub_spot", "degenerate"),
     "CME.CL.FRONT": ("prices.intraday", "CL_FRONT", "degenerate"),
     "CME.BZ.FRONT": ("prices.intraday", "BZ_FRONT", "degenerate"),
     "CME.NG.FRONT": ("prices.intraday", "NG_FRONT", "degenerate"),
@@ -38,6 +42,7 @@ LIBRARY_MODE: dict[str, str] = {
     "fundamentals.eia": "bitemporal_merge",
     "prices.power": "bitemporal_merge",
     "weather": "bitemporal_replace",
+    "prices.spot": "degenerate",
     "prices.intraday": "degenerate",
     "prices.futures": "bitemporal_merge",
 }
