@@ -8,10 +8,10 @@ ENV UV_COMPILE_BYTECODE=1 \
     UV_PYTHON_DOWNLOADS=0
 WORKDIR /app
 
-# Extras to install. Defaults to the FastAPI service image; the Dagster image overrides
-# this (orchestration+storage+quality+graph) via --build-arg. arcticdb (storage extra)
-# ships only x86_64 linux wheels, so the Dagster image must be built linux/amd64.
-ARG EXTRAS="--extra service --extra sentiment"
+# Extras to install. Defaults to the S2 read API image (service + storage); the Dagster
+# image overrides this (orchestration+storage+quality+graph) via --build-arg. arcticdb
+# (storage extra) ships only x86_64 linux wheels, so these images must be built linux/amd64.
+ARG EXTRAS="--extra service --extra storage"
 
 # 1) deps-only layer (cached unless lock/pyproject/EXTRAS change)
 RUN --mount=type=cache,target=/root/.cache/uv \
@@ -43,5 +43,6 @@ EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
   CMD python -c "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8000/healthz').status==200 else 1)"
 
-# exec-form CMD => Python is PID 1 (receives SIGTERM); workers=1 = single DuckDB writer.
-CMD ["uvicorn", "energex.service.app:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1"]
+# exec-form CMD => Python is PID 1 (receives SIGTERM). Defaults to the S2 read API; the
+# compose `api` service overrides the port (8001). workers=1 = one ArcticDB client.
+CMD ["uvicorn", "energex.service.readapi:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1"]

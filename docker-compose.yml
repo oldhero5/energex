@@ -1,47 +1,4 @@
 services:
-  energex:
-    build: .
-    image: ghcr.io/oldhero5/energex:local
-    container_name: energex
-    profiles: ["full"]               # only the full stack runs the API service
-    init: true                       # forward signals / reap zombies
-    restart: unless-stopped          # recovers on crash and when OrbStack starts
-    stop_grace_period: 30s           # let lifespan stop the scheduler + close the DB
-    mem_limit: 1g
-    cpus: 1.0
-    env_file:
-      - .env                         # secrets/config at runtime, NOT baked into the image
-    environment:
-      ENERGEX_DB_PATH: /data/energy.db
-      TZ: America/Chicago
-      LOG_LEVEL: INFO
-      ENERGEX_INGEST_CRON: "*/5 * * * *"
-      # Local LLM via Ollama (gemma3:4b). Reaches the host's Ollama from the container.
-      DEFAULT_LLM_PROVIDER: ollama
-      DEFAULT_LLM_MODEL: gemma3:4b
-      OLLAMA_BASE_URL: http://host.docker.internal:11434
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
-    ports:
-      - "8000:8000"
-    volumes:
-      - energex-data:/data          # NAMED volume (native ext4) -> durable DB + reliable locking
-      - ./backups:/backups          # bind mount for EXPORT DATABASE snapshots (visible on the Mac)
-    depends_on:
-      minio-init:
-        condition: service_completed_successfully
-    healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8000/healthz').status==200 else 1)"]
-      interval: 30s
-      timeout: 5s
-      retries: 3
-      start_period: 30s
-    logging:
-      driver: json-file
-      options:
-        max-size: "10m"
-        max-file: "5"
-
   api:
     # S2 read API: the read-only seam the (separate, private) frontend consumes.
     # arcticdb (storage extra) has no linux/arm64 wheel -> build+run amd64 under emulation.
@@ -342,7 +299,6 @@ services:
         max-file: "5"
 
 volumes:
-  energex-data:                      # survives `compose down` / OrbStack restart (only `down -v` deletes it)
   minio-data:                        # ArcticDB store of record (separate volume from Postgres)
   dagster-pg-data:                   # Dagster instance storage (separate volume from MinIO)
   dagster-home:                      # shared DAGSTER_HOME (instance config + compute logs)

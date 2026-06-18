@@ -6,13 +6,12 @@ from energex.core.exceptions import (
     QualityGateError,
     StorageError,
     SymbologyError,
-    VintageImmutableError,
 )
 
 
 @pytest.mark.parametrize(
     "exc",
-    [QualityGateError, StorageError, SymbologyError, PartitionError, VintageImmutableError],
+    [QualityGateError, StorageError, SymbologyError, PartitionError],
 )
 def test_new_exceptions_subclass_base(exc):
     assert issubclass(exc, EnergexError)

@@ -64,7 +64,3 @@ class SymbologyError(EnergexError):
 
 class PartitionError(EnergexError):
     """Raised when a Dagster partition key cannot be mapped to a valid_time range."""
-
-
-class VintageImmutableError(EnergexError):
-    """Raised on an attempt to mutate an already-committed live (non-reconstructed) vintage."""

@@ -7,8 +7,8 @@ same URI grammar/config as ``orchestration.ArcticDBResource`` -- creds come from
 (MINIO_* / ARCTIC_BUCKET) and the connection URI embeds the secret (ArcticDB S3
 requirement), so the URI is NEVER logged.
 
-Run with ``uvicorn energex.service.readapi:app --workers 1``. The legacy DuckDB app
-(``energex.service.app``) is deprecated; this is the S2 replacement.
+Run with ``uvicorn energex.service.readapi:app --workers 1``. The legacy DuckDB serving
+app (``energex.service.app``) and APScheduler were removed; this is the S2 replacement.
 """
 
 from __future__ import annotations
