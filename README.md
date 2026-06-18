@@ -1,166 +1,185 @@
 # Energex
 
-Energy derivatives data collection and analysis system with advanced analytics for futures trading.
+A self-hosted, always-on energy-market data platform with a **bitemporal
+(point-in-time-correct) store of record**.
 
-## Features
+Energex continuously ingests public energy data — EIA fundamentals, NOAA weather,
+FRED benchmark spot prices, and (in development) intraday futures — validates every
+batch through a quality gate, and commits it to a versioned ArcticDB store on MinIO.
+The store remembers not just *what* a value was, but *when each value became known*,
+so you can reconstruct exactly what the data looked like at any past moment.
 
-### Data Collection
-- Real-time intraday data fetching (1-minute intervals)
-- Support for major energy futures contracts (CL=F, BZ=F, NG=F)
-- Dated futures contract curves: the forward strip of monthly contracts per commodity (daily settlements), enabling real term-structure analytics
-- Efficient storage using DuckDB
-- Robust error handling and validation
+## Why point-in-time matters
 
-### Analysis Tools
-- **Data Quality**:
-  - Price gap detection
-  - Volume anomaly detection
-  - OHLC consistency checks
+Government and market data is **revised**. EIA restates gas-storage and crude-stock
+figures for weeks after first publication; NOAA reissues monthly degree-day files.
+A naive store overwrites the old number and silently rewrites history — which makes
+any backtest run against it optimistic and wrong.
 
-- **Volatility Analysis**:
-  - Realized volatility
-  - Parkinson volatility estimator
-  - Garman-Klass volatility
-  - Intraday range analysis
+Energex keeps two independent time axes on every observation:
 
-- **Futures Analysis**:
-  - Term structure analysis
-  - Roll yield calculations
-  - Basis risk measurement
-  - Implied interest rates
+- **`valid_time`** — the period the row describes (e.g. the week ending 2026-05-30).
+- **`as_of`** — the knowledge/release time: *when we learned this value.*
 
-- **Dated Futures Curves** (`DatedFuturesAnalyzer`):
-  - Forward curve as of a date (Close + days-to-maturity per contract month)
-  - Annualized term-structure slope
-  - Per-adjacent-pair annualized roll yield
-  - Curve shape classification (backwardation / contango / flat)
+`read_as_of(symbol, as_of=T)` returns the data exactly as it was known at time `T` —
+no future leakage. Because upstream sources (EIA, ERCOT) revise inline and expose no
+vintage parameter, **true** point-in-time history can only accrue going forward, from
+the day Energex starts watching. History captured by backfilling is flagged
+`vintage_reconstructed=True` so a backtest never mistakes a reconstructed baseline for
+something that was actually observed at the time. That honesty flag is the platform's
+core invariant.
 
-- **Market Sentiment Analysis** ✨ *New in v0.3.0*:
-  - AI-powered news sentiment analysis
-  - Multi-LLM provider support (OpenAI, Anthropic, Ollama)
-  - Automatic news aggregation from RSS feeds and NewsAPI
-  - Time-aligned sentiment enrichment of price data
-  - Graceful degradation with rule-based fallback
+## Architecture
 
-### Visualization
-- Interactive Plotly charts
-- Price and volume analysis
-- Sentiment overlay visualizations
-- Term structure curves
-- Volatility metrics dashboards
+Energex uses a **hexagonal (ports-and-adapters)** layout. The domain core is pure and
+framework-agnostic; orchestration is the only layer allowed to import a framework
+(Dagster). A CI test (`tests/test_core_has_no_framework_imports.py`) fails the build if
+`energex.core` ever imports `dagster`, `fastapi`, or `langgraph`.
 
-## Installation
+| Layer | Package | Responsibility |
+| --- | --- | --- |
+| **Core** (pure) | `energex.core` | Connectors (`Connector` protocol + `FetchResult`), storage (ArcticDB bitemporal store), quality gate (pandera), symbology, schemas, config. Zero framework imports. |
+| **Orchestration** | `energex.orchestration` | The only Dagster importer: assets, checks, partitions, schedules, resources, reconcile, definitions. |
+| **Serving** *(reserved, S2)* | `energex.service` | FastAPI read API with `as_of` as a first-class parameter. |
+| **Agent** *(reserved, S3)* | `energex.agent` | LangGraph analytical agent over the read API. |
 
-### Core Functionality
+The **S4 frontend** (the immersive cross-device app) lives in a **separate private
+repository** and is the commercial product. It consumes only the S2 read API — that is
+the open-core boundary. See the
+[frontend design brief](docs/2026-06-18-s4-frontend-experience-design.md) and the
+[roadmap](website/docs/roadmap.md).
+
+```
+sources ──> Connector ──> quality gate ──> ArcticDB (MinIO)
+(EIA/NOAA/    (core)        (pandera)        bitemporal store of record
+ FRED/yf)                                          │
+                                                   ▼
+                              Dagster (assets · schedules · checks · reconcile)
+```
+
+## Live data sources
+
+| Source | Connector | ArcticDB library | Cadence | Revision mode |
+| --- | --- | --- | --- | --- |
+| **EIA v2** fundamentals (Lower-48 gas storage, crude stocks ex-SPR) | `EiaGasStorageConnector`, `EiaPetroleumStatusConnector` | `fundamentals.eia` | Weekly (Thu / Wed) | `bitemporal_merge` |
+| **NOAA nClimDiv** (HDD/CDD by US region) | `NOAANClimDivConnector` | `weather` | Monthly | `bitemporal_replace` |
+| **FRED** benchmark spot (WTI, Brent, Henry Hub) | `FredConnector` | `prices.spot` | Daily (weekdays) | `degenerate` |
+| **yfinance** front-month intraday (CL/BZ/NG) | `YFinanceIntradayConnector` | `prices.intraday` | Manual — **dev only** | `degenerate` |
+
+> **yfinance is dev-only and unscheduled.** Yahoo frequently blocks programmatic
+> access, so a schedule would only fire failing runs. The asset stays manual.
+
+An optional **Neo4j** entity graph references these instruments by symbol but never
+owns the numbers.
+
+## Quickstart
+
+### Run the always-on stack
+
+Requires Docker / OrbStack. The `full` profile brings up MinIO, Dagster (Postgres +
+webserver + daemon), Neo4j, and the legacy FastAPI service.
+
 ```bash
-pip install energex
+cp .env.example .env        # fill in EIA_API_KEY and FRED_API_KEY (free); placeholders OK for the rest
+docker compose --profile full up -d
 ```
 
-### With Sentiment Analysis
+Then open:
+
+- **Dagster UI** — http://localhost:3000 (assets, schedules, run history, backfills)
+- **MinIO console** — http://localhost:9001 (the ArcticDB object store)
+- **Neo4j browser** — http://localhost:7474
+- **Legacy API** — http://localhost:8000
+
+Four schedules run by default and keep the store current with no manual intervention:
+EIA gas storage (Thursday), EIA petroleum status (Wednesday), FRED spot (weekday
+mornings), and NOAA degree days (monthly).
+
+> **Apple Silicon note:** ArcticDB has no `arm64` wheel, so the Dagster image is built
+> and run as `linux/amd64` under emulation. It works on M-series Macs; expect slightly
+> slower cold starts.
+
+### Dev loop
+
 ```bash
-pip install energex[sentiment]
-```
-
-### All Optional Features
-```bash
-pip install energex[all]
-```
-
-## Quick Start
-
-### Basic Usage
-
-```python
-import polars as pl
-from energex import EnergyDatabase, EnergyDataFetcher, VolatilityAnalyzer
-
-# Initialize database and fetcher
-db = EnergyDatabase()
-fetcher = EnergyDataFetcher()
-
-# Fetch and store data
-data = fetcher.fetch_all_commodities()
-db.insert_intraday_data(data)
-
-# Query and analyze
-query = "SELECT * FROM intraday_prices WHERE Symbol = 'CL=F'"
-df = pl.from_arrow(db.conn.execute(query).arrow())
-
-analyzer = VolatilityAnalyzer(df)
-results = analyzer.calculate_volatility_metrics()
-print(results)
-```
-
-### Sentiment Analysis
-
-```python
-from energex import MarketSentimentAnalyzer, check_sentiment_available
-
-# Check if sentiment analysis is available
-if check_sentiment_available():
-    # Initialize analyzer with price data
-    analyzer = MarketSentimentAnalyzer(df)
-
-    # Fetch and analyze news sentiment
-    sentiment_df = analyzer.analyze_news_sentiment(hours_back=48)
-
-    # Join sentiment to price data
-    enriched_df = analyzer.add_sentiment_to_prices(
-        sentiment_df,
-        aggregation='weighted'
-    )
-
-    # Get summary
-    summary = analyzer.get_sentiment_summary(sentiment_df)
-    for symbol, avg in summary["avg_sentiment_by_symbol"].items():
-        print(f"  {symbol}: {avg:.3f}")
+uv sync --all-extras                                   # install everything
+uv run pytest                                          # run the test suite
+uv run ruff check src/energex tests                    # lint
+uv run dagster dev -m energex.orchestration.definitions  # local Dagster UI on :3000
 ```
 
 ## Configuration
 
-Energex uses environment variables for configuration. Create a `.env` file in your project root:
+All configuration is environment-driven. Copy [`.env.example`](.env.example) to `.env`
+and fill in real values (the live `.env` is gitignored — never commit secrets).
+
+Key variables (see [`.env.example`](.env.example) for the complete annotated list and
+[`src/energex/core/config.py`](src/energex/core/config.py) for how they bind):
+
+| Variable | Purpose |
+| --- | --- |
+| `MINIO_ENDPOINT`, `ARCTIC_BUCKET`, `ARCTIC_SECURE` | ArcticDB-on-MinIO connection |
+| `MINIO_ACCESS_KEY`, `MINIO_SECRET_KEY` | Scoped ArcticDB service-account credentials |
+| `MINIO_ROOT_USER`, `MINIO_ROOT_PASSWORD` | MinIO root (compose-only; provisions the scoped account) |
+| `ARCTIC_ACCESS_KEY`, `ARCTIC_SECRET_KEY` | Scoped service account created by `minio-init` |
+| `EIA_API_KEY`, `FRED_API_KEY`, `NOAA_TOKEN` | Source connector credentials |
+| `ERCOT_USERNAME`, `ERCOT_PASSWORD`, `ERCOT_SUBSCRIPTION_KEY` | ERCOT credentials (reserved) |
+| `NEO4J_URI`, `NEO4J_USER`, `NEO4J_PASSWORD` | Entity graph |
+| `DAGSTER_PG_USERNAME`, `DAGSTER_PG_PASSWORD`, `DAGSTER_PG_DB` | Dagster Postgres (compose) |
+| `DEFAULT_LLM_PROVIDER`, `DEFAULT_LLM_MODEL`, `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `OLLAMA_BASE_URL` | LLM provider (reserved, S3) |
+| `LOG_LEVEL`, `LOG_FILE`, `LOG_ENABLE_CONSOLE` | Logging |
+
+## How point-in-time works
+
+Each connector returns a `FetchResult` whose frame carries an `instrument_id`, a
+tz-aware UTC `valid_time`, value columns, and provenance (`source`, `fetched_at`,
+`source_url`). Every batch is validated by the pandera quality gate *before* any write.
+
+The store then commits according to the instrument's **revision mode**:
+
+- **`degenerate`** — never-revised streams (FRED spot, intraday bars). `write_bars`
+  appends with de-duplication; `as_of` equals `fetched_at`.
+- **`bitemporal_replace`** — each release is a complete as-known series (NOAA). A full
+  versioned write per `as_of`.
+- **`bitemporal_merge`** — each release revises a window inline (EIA). Read-modify-write
+  merges the revision window onto the prior as-known series, by exact `valid_time`.
+
+Vintages are addressed through an append-only, per-symbol integer version index. The
+index append is the atomic **commit point**: a crash between the data write and the
+index append leaves an orphan data version, which `reconcile_orphans` cleans up.
+`read_as_of` always resolves against the *committed* index, never an orphan.
+
+Full walkthrough: see the [documentation site](website/docs/intro.md), in particular
+[Storage & Point-in-Time](website/docs/storage-point-in-time.md).
+
+## Documentation
+
+A complete Docusaurus documentation site lives in [`website/`](website):
 
 ```bash
-# LLM Provider (for sentiment analysis)
-DEFAULT_LLM_PROVIDER=openai  # or anthropic, ollama
-DEFAULT_LLM_MODEL=gpt-4
-
-# API Keys
-OPENAI_API_KEY=sk-your-key-here
-ANTHROPIC_API_KEY=sk-ant-your-key-here
-
-# Local LLM (Ollama)
-OLLAMA_BASE_URL=http://localhost:11434
-
-# News Sources (optional)
-NEWS_NEWS_API_KEY=your-newsapi-key
-
-# Database
-DATABASE_PATH=./data/energex.db
-
-# Logging
-LOG_LEVEL=INFO
+cd website
+npm install
+npm run start     # local dev server with live reload
+npm run build     # production build into website/build
 ```
 
-See [.env.example](.env.example) for all available configuration options.
+It covers the architecture, bitemporal model, quickstart, data sources & connectors,
+storage internals, orchestration, deployment, operations, testing, and the roadmap.
 
-## Examples
+## Roadmap
 
-Complete examples are available in the `src/examples/` directory:
-
-- `01_data_quality_analysis.py` - Data quality checks and validation
-- `02_volatility_analysis.py` - Volatility metrics and visualization
-- `03_futures_analysis.py` - Futures term structure analysis
-- `04_sentiment_analysis.py` - Market sentiment analysis with LLMs
-
-Run an example:
-```bash
-python src/examples/04_sentiment_analysis.py
-```
+- **S2 — Serving:** FastAPI read API with `as_of` first-class on every endpoint
+  (`/curve`, `/term-structure`, `/fundamentals`, `/spot`, `/series/{id}/vintages`).
+- **S3 — Agent:** LangGraph analytical agent that threads `as_of` through read-only
+  queries.
+- **S4 — Frontend:** the immersive cross-device app (separate private repo, the
+  commercial product), consuming only the S2 API. See the
+  [frontend brief](docs/2026-06-18-s4-frontend-experience-design.md).
 
 ## Contributing
 
-Contributions are welcome! Please read our [Contributing Guidelines](CONTRIBUTING.md) for details.
+Contributions are welcome — please read [CONTRIBUTING.md](CONTRIBUTING.md) for the dev
+setup, the core/framework boundary rule, and licensing terms.
 
 ## License
 
