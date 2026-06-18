@@ -1,7 +1,7 @@
 [project]
 name = "energex"
-version = "0.3.0"
-description = "Energy derivatives data collection and analysis system"
+version = "0.4.0"
+description = "Self-hosted, always-on energy-market data platform with a bitemporal (point-in-time-correct) store of record"
 authors = [
     {name = "Marty H", email = "oldhero5@proton.me"}
 ]

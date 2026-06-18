@@ -57,9 +57,9 @@ try:
 except ImportError:
     pass
 
-__version__ = "0.3.0"
+__version__ = "0.4.0"
 __author__ = "Marty H"
-__license__ = "MIT"
+__license__ = "PolyForm-Noncommercial-1.0.0"
 
 # Core modules
 # Analysis modules
