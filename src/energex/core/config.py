@@ -136,9 +136,10 @@ class Neo4jConfig(BaseSettings):
 
 
 class ConnectorConfig(BaseSettings):
-    """Source connector credentials (env: EIA_API_KEY, ERCOT_*, NOAA_TOKEN)."""
+    """Source connector credentials (env: EIA_API_KEY, FRED_API_KEY, ERCOT_*, NOAA_TOKEN)."""
 
     eia_api_key: SecretStr | None = Field(default=None, validation_alias="EIA_API_KEY")
+    fred_api_key: SecretStr | None = Field(default=None, validation_alias="FRED_API_KEY")
     ercot_username: str | None = Field(default=None, validation_alias="ERCOT_USERNAME")
     ercot_password: SecretStr | None = Field(default=None, validation_alias="ERCOT_PASSWORD")
     ercot_subscription_key: SecretStr | None = Field(
