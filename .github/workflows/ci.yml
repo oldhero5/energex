@@ -95,10 +95,11 @@ jobs:
       - uses: astral-sh/setup-uv@v5
         with:
           enable-cache: true
-      - name: yfinance connector test (offline; mocked network seam)
+      - name: connector contract tests (offline; mocked network seam)
         run: >
           uv run --extra storage --extra quality --extra dev pytest -q
           tests/test_connector_yfinance.py
+          tests/test_connector_fred.py
 
   secrets:
     name: Secret scan (gitleaks)
