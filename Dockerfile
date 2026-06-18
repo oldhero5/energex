@@ -8,22 +8,28 @@ ENV UV_COMPILE_BYTECODE=1 \
     UV_PYTHON_DOWNLOADS=0
 WORKDIR /app
 
-# 1) deps-only layer (cached unless lock/pyproject change)
+# Extras to install. Defaults to the FastAPI service image; the Dagster image overrides
+# this (orchestration+storage+quality+graph) via --build-arg. arcticdb (storage extra)
+# ships only x86_64 linux wheels, so the Dagster image must be built linux/amd64.
+ARG EXTRAS="--extra service --extra sentiment"
+
+# 1) deps-only layer (cached unless lock/pyproject/EXTRAS change)
 RUN --mount=type=cache,target=/root/.cache/uv \
     --mount=type=bind,source=uv.lock,target=uv.lock \
     --mount=type=bind,source=pyproject.toml,target=pyproject.toml \
-    uv sync --locked --no-install-project --no-editable --extra service --extra sentiment
+    uv sync --locked --no-install-project --no-editable ${EXTRAS}
 
 # 2) project layer
 COPY . /app
 RUN --mount=type=cache,target=/root/.cache/uv \
-    uv sync --locked --no-editable --extra service --extra sentiment
+    uv sync --locked --no-editable ${EXTRAS}
 
 # ---- runtime ----
 FROM python:3.12-slim-bookworm AS runtime
 RUN groupadd --system --gid 999 nonroot \
  && useradd  --system --gid 999 --uid 999 --create-home nonroot \
- && mkdir -p /data /backups && chown nonroot:nonroot /data /backups
+ && mkdir -p /data /backups /opt/dagster/home \
+ && chown nonroot:nonroot /data /backups /opt/dagster/home
 
 COPY --from=builder --chown=nonroot:nonroot /app/.venv /app/.venv
 ENV PATH="/app/.venv/bin:$PATH" \

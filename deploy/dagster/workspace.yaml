@@ -3,4 +3,4 @@
 load_from:
   - python_module:
       module_name: energex.orchestration.definitions
-      working_directory: /opt/dagster/app
+      working_directory: /app

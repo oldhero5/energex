@@ -129,8 +129,13 @@ services:
         max-file: "5"
 
   dagster-webserver:
-    build: .
-    image: ghcr.io/oldhero5/energex:local
+    # arcticdb (storage extra) has no linux/arm64 wheel -> build+run amd64 under emulation.
+    build:
+      context: .
+      args:
+        EXTRAS: "--extra orchestration --extra storage --extra quality --extra graph"
+    image: ghcr.io/oldhero5/energex:dagster
+    platform: linux/amd64
     container_name: energex-dagster-webserver
     profiles: ["dev", "full"]
     init: true
@@ -138,12 +143,24 @@ services:
     mem_limit: 1g
     cpus: 1.0
     command: ["dagster-webserver", "-h", "0.0.0.0", "-p", "3000", "-w", "/opt/dagster/home/workspace.yaml"]
+    env_file:
+      - .env                         # connector API keys (EIA_API_KEY, FRED_API_KEY); .env is dockerignored
     environment:
       DAGSTER_HOME: /opt/dagster/home
       DAGSTER_PG_HOST: dagster-postgres
       DAGSTER_PG_USERNAME: ${DAGSTER_PG_USERNAME:-dagster}
       DAGSTER_PG_PASSWORD: ${DAGSTER_PG_PASSWORD:-dagster}
       DAGSTER_PG_DB: ${DAGSTER_PG_DB:-dagster}
+      # In-network MinIO: containers reach MinIO at the compose service name, NOT localhost.
+      MINIO_ENDPOINT: minio:9000
+      ARCTIC_BUCKET: ${ARCTIC_BUCKET:-arctic}
+      # Scoped ArcticDB service account created by minio-init (NOT MinIO root).
+      MINIO_ACCESS_KEY: ${ARCTIC_ACCESS_KEY:-energex-arctic}
+      MINIO_SECRET_KEY: ${ARCTIC_SECRET_KEY:-energex-arctic-secret}
+      # Entity graph (Neo4jResource forward-compat).
+      NEO4J_URI: bolt://neo4j:7687
+      NEO4J_USER: neo4j
+      NEO4J_PASSWORD: ${NEO4J_PASSWORD:-energex-neo4j}
       TZ: UTC
     ports:
       - "3000:3000"
@@ -169,21 +186,38 @@ services:
         max-file: "5"
 
   dagster-daemon:
-    build: .
-    image: ghcr.io/oldhero5/energex:local
+    # Shares the amd64 dagster image (arcticdb has no linux/arm64 wheel).
+    build:
+      context: .
+      args:
+        EXTRAS: "--extra orchestration --extra storage --extra quality --extra graph"
+    image: ghcr.io/oldhero5/energex:dagster
+    platform: linux/amd64
     container_name: energex-dagster-daemon
     profiles: ["dev", "full"]
     init: true
     restart: unless-stopped
     mem_limit: 1g
     cpus: 1.0
-    command: ["dagster-daemon", "run"]
+    command: ["dagster-daemon", "run", "-w", "/opt/dagster/home/workspace.yaml"]
+    env_file:
+      - .env                         # connector API keys (EIA_API_KEY, FRED_API_KEY); .env is dockerignored
     environment:
       DAGSTER_HOME: /opt/dagster/home
       DAGSTER_PG_HOST: dagster-postgres
       DAGSTER_PG_USERNAME: ${DAGSTER_PG_USERNAME:-dagster}
       DAGSTER_PG_PASSWORD: ${DAGSTER_PG_PASSWORD:-dagster}
       DAGSTER_PG_DB: ${DAGSTER_PG_DB:-dagster}
+      # In-network MinIO: containers reach MinIO at the compose service name, NOT localhost.
+      MINIO_ENDPOINT: minio:9000
+      ARCTIC_BUCKET: ${ARCTIC_BUCKET:-arctic}
+      # Scoped ArcticDB service account created by minio-init (NOT MinIO root).
+      MINIO_ACCESS_KEY: ${ARCTIC_ACCESS_KEY:-energex-arctic}
+      MINIO_SECRET_KEY: ${ARCTIC_SECRET_KEY:-energex-arctic-secret}
+      # Entity graph (Neo4jResource forward-compat).
+      NEO4J_URI: bolt://neo4j:7687
+      NEO4J_USER: neo4j
+      NEO4J_PASSWORD: ${NEO4J_PASSWORD:-energex-neo4j}
       TZ: UTC
     volumes:
       - dagster-home:/opt/dagster/home
