@@ -1,5 +1,7 @@
 """Custom exceptions for energex."""
 
+import pandas as pd
+
 
 class EnergexError(Exception):
     """Base exception for all energex errors."""
@@ -44,7 +46,7 @@ class QualityGateError(EnergexError):
     Dagster asset check and CI can surface every failure at once.
     """
 
-    def __init__(self, *, schema_name: str, failures: object) -> None:
+    def __init__(self, *, schema_name: str, failures: pd.DataFrame) -> None:
         self.schema_name = schema_name
         self.failures = failures
         super().__init__(

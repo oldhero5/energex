@@ -36,11 +36,22 @@ def _business_days_between(start, end) -> int:
     """
     if pd.isna(start) or pd.isna(end):
         return 0
-    s = pd.Timestamp(start).tz_convert("UTC").tz_localize(None).normalize()
-    e = pd.Timestamp(end).tz_convert("UTC").tz_localize(None).normalize()
+    s = _to_naive_utc(start).normalize()
+    e = _to_naive_utc(end).normalize()
     if e <= s:
         return 0
     return int(np.busday_count(s.date(), e.date()))
+
+
+def _to_naive_utc(value) -> pd.Timestamp:
+    """Coerce any datetime-like to a tz-naive UTC ``pd.Timestamp``.
+
+    tz-naive input is assumed UTC (localize), tz-aware input is converted; both
+    end up tz-naive so ``np.busday_count`` can take ``.date()``.
+    """
+    ts = pd.Timestamp(value)
+    ts = ts.tz_localize("UTC") if ts.tzinfo is None else ts.tz_convert("UTC")
+    return ts.tz_localize(None)
 
 
 def _freshness_check(max_business_days: int) -> Check:

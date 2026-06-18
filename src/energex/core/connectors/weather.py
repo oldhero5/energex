@@ -118,7 +118,13 @@ def _parse_file(text: str, element: str, value_col: str) -> pd.DataFrame:
             records.append((instrument_id, year, m + 1, float(field)))
 
     if not records:
-        return pd.DataFrame({"instrument_id": [], "valid_time": [], value_col: []})
+        return pd.DataFrame(
+            {
+                "instrument_id": pd.Series(dtype="object"),
+                "valid_time": pd.Series(dtype="datetime64[ns, UTC]"),
+                value_col: pd.Series(dtype="float64"),
+            }
+        )
 
     df = pd.DataFrame(records, columns=["instrument_id", "_year", "_month", value_col])
     df["valid_time"] = pd.to_datetime(

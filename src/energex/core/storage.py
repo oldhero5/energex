@@ -243,9 +243,9 @@ def read_as_of(lib, symbol, *, as_of=None, date_range=None):
 # ---------------------------------------------------------------- polars seam
 def _to_polars(versioned_item) -> pl.DataFrame:
     df = versioned_item.data.reset_index()  # DatetimeIndex 'Datetime' -> column
-    if "Datetime" in df.columns:
+    if "Datetime" in df.columns and df["Datetime"].dt.tz is None:
         df["Datetime"] = df["Datetime"].dt.tz_localize("UTC")  # Arctic stripped tz
-    if "valid_time" in df.columns:
+    if "valid_time" in df.columns and df["valid_time"].dt.tz is None:
         df["valid_time"] = df["valid_time"].dt.tz_localize("UTC")
     pf = pl.from_pandas(df)
     if "ContractMonth" in pf.columns:

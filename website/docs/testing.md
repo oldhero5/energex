@@ -36,7 +36,8 @@ uv run --all-extras pytest tests/test_storage_pointintime.py   # a single file
 | **Storage & point-in-time** | `test_storage_pointintime`, `test_storage_roundtrip`, `test_storage_curve`, `test_latest_is_committed` |
 | **Bitemporal invariants** | `test_pointintime_reverse_backfill`, `test_revision_merge_gap`, `test_write_bars_sparse` |
 | **Crash safety** | `test_crash_safety` (orphan write + `reconcile_orphans`) |
-| **Connectors** | `test_connector_eia`, `test_connector_fred`, `test_connector_weather`, `test_connector_yfinance`, `test_api_contract` |
+| **Connectors** | `test_connector_eia`, `test_connector_fred`, `test_connector_weather`, `test_connector_yfinance` |
+| **Public API contract** | `test_api_contract` (the importable `energex` public surface, not a data-source connector) |
 | **Quality gate** | `test_pandera_schemas`, `test_quality`, `test_quality_collision` |
 | **Symbology** | `test_symbology` |
 | **Orchestration loads** | `test_definitions_load` (the Dagster `Definitions` import cleanly) |

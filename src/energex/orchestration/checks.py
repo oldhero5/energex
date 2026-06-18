@@ -3,7 +3,10 @@
 The check reads the committed bars back from ArcticDB and re-runs the SAME
 ``core.quality.validate(OHLCV)`` the asset ran (re-localizing valid_time to UTC,
 which Arctic strips on store), proving the vintage resolves and still passes the
-gate. UI visibility is best-effort; the real safety net is reconcile.py.
+gate. The freshness wide-check uses the as_of the asset *committed* (max of the
+read-back ``as_of`` provenance column), not wall-clock now, so a later check run
+cannot false-flag staleness for data that was fresh when written. UI visibility
+is best-effort; the real safety net is reconcile.py.
 """
 
 from __future__ import annotations
@@ -32,6 +35,16 @@ from energex.orchestration.assets import (
 from energex.orchestration.resources import ArcticDBResource
 
 
+def _committed_as_of(frame: pd.DataFrame) -> datetime:
+    """Knowledge time the asset wrote: the max committed ``as_of`` in the read-back
+    frame (Arctic strips tz on store, so re-localize to UTC). Using the committed
+    as_of — not wall-clock now — keeps the freshness check at the SAME knowledge time
+    the asset validated against. Falls back to now only if provenance is absent."""
+    if "as_of" in frame.columns and len(frame):
+        return pd.to_datetime(frame["as_of"], utc=True).max().to_pydatetime()
+    return datetime.now(timezone.utc)
+
+
 @dg.asset_check(
     asset="intraday_futures_bars",
     name="intraday_bars_pass_quality_gate",
@@ -55,8 +68,9 @@ def intraday_bars_pass_quality_gate(arctic: ArcticDBResource) -> dg.AssetCheckRe
 
     frame = pd.concat(frames, ignore_index=True)
     frame["valid_time"] = pd.to_datetime(frame["valid_time"], utc=True)  # Arctic stripped tz
+    as_of = _committed_as_of(frame)
     try:
-        validated = quality.validate(frame, schemas.OHLCV, as_of=datetime.now(timezone.utc))
+        validated = quality.validate(frame, schemas.OHLCV, as_of=as_of)
     except QualityGateError as exc:
         return dg.AssetCheckResult(
             passed=False,
@@ -95,8 +109,9 @@ def noaa_degree_days_pass_quality_gate(arctic: ArcticDBResource) -> dg.AssetChec
 
     frame = pd.concat(frames, ignore_index=True)
     frame["valid_time"] = pd.to_datetime(frame["valid_time"], utc=True)  # Arctic stripped tz
+    as_of = _committed_as_of(frame)
     try:
-        validated = quality.validate(frame, schemas.NOAA_HDDCDD, as_of=datetime.now(timezone.utc))
+        validated = quality.validate(frame, schemas.NOAA_HDDCDD, as_of=as_of)
     except QualityGateError as exc:
         return dg.AssetCheckResult(
             passed=False,
@@ -135,8 +150,9 @@ def fred_spot_prices_pass_quality_gate(arctic: ArcticDBResource) -> dg.AssetChec
 
     frame = pd.concat(frames, ignore_index=True)
     frame["valid_time"] = pd.to_datetime(frame["valid_time"], utc=True)  # Arctic stripped tz
+    as_of = _committed_as_of(frame)
     try:
-        validated = quality.validate(frame, schemas.FRED_SPOT, as_of=datetime.now(timezone.utc))
+        validated = quality.validate(frame, schemas.FRED_SPOT, as_of=as_of)
     except QualityGateError as exc:
         return dg.AssetCheckResult(
             passed=False,
@@ -173,8 +189,9 @@ def _eia_gate_readback(
 
     frame = pd.concat(frames, ignore_index=True)
     frame["valid_time"] = pd.to_datetime(frame["valid_time"], utc=True)  # Arctic stripped tz
+    as_of = _committed_as_of(frame)
     try:
-        validated = quality.validate(frame, schema, as_of=datetime.now(timezone.utc))
+        validated = quality.validate(frame, schema, as_of=as_of)
     except QualityGateError as exc:
         return dg.AssetCheckResult(
             passed=False,

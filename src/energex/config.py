@@ -1,7 +1,5 @@
-"""Re-export shim — config moved to energex.core.config (S1).
-
-Kept so existing modules and the 122 pre-S1 tests keep importing energex.config.
-"""
+"""Re-export shim — config moved to energex.core.config; this shim preserves
+backward-compatible imports of ``energex.config``."""
 
 from energex.core.config import (  # noqa: F401
     AnalysisConfig,

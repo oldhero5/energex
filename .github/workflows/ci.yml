@@ -97,9 +97,12 @@ jobs:
           enable-cache: true
       - name: connector contract tests (offline; mocked network seam)
         run: >
-          uv run --extra storage --extra quality --extra dev pytest -q
+          uv run --extra storage --extra quality --extra service --extra dev pytest -q
           tests/test_connector_yfinance.py
           tests/test_connector_fred.py
+          tests/test_connector_eia.py
+          tests/test_connector_weather.py
+          tests/test_readapi.py
 
   secrets:
     name: Secret scan (gitleaks)
