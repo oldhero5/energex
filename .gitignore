@@ -36,6 +36,13 @@ website/node_modules/
 website/build/
 website/.docusaurus/
 
+# Frontend (separate PRIVATE repo checked out into ./frontend; the compose `frontend`
+# service builds from here). Never tracked in this open-core repo.
+frontend/
+frontend/node_modules/
+frontend/dist/
+frontend/.next/
+
 CLAUDE.md
 
 docs/superpowers/*
