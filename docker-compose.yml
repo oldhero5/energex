@@ -174,7 +174,8 @@ services:
       minio-init:
         condition: service_completed_successfully
     healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:3000/server_info || exit 1"]
+      # slim image has no curl; use python urllib (matches the energex service healthcheck).
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:3000/server_info').status==200 else 1)"]
       interval: 30s
       timeout: 5s
       retries: 3
