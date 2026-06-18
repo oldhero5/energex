@@ -56,6 +56,7 @@ def _latest_partition_request(
     cron_schedule="35 10 * * 4",
     execution_timezone="America/New_York",
     name="eia_gas_storage_schedule",
+    default_status=dg.DefaultScheduleStatus.RUNNING,
 )
 def eia_gas_storage_schedule(
     context: dg.ScheduleEvaluationContext,
@@ -69,6 +70,7 @@ def eia_gas_storage_schedule(
     cron_schedule="35 10 * * 3",
     execution_timezone="America/New_York",
     name="eia_petroleum_status_schedule",
+    default_status=dg.DefaultScheduleStatus.RUNNING,
 )
 def eia_petroleum_status_schedule(
     context: dg.ScheduleEvaluationContext,
@@ -82,6 +84,7 @@ def eia_petroleum_status_schedule(
     cron_schedule="0 12 6 * *",
     execution_timezone="America/New_York",
     name="noaa_degree_days_schedule",
+    default_status=dg.DefaultScheduleStatus.RUNNING,
 )
 def noaa_degree_days_schedule(
     context: dg.ScheduleEvaluationContext,
@@ -95,6 +98,7 @@ def noaa_degree_days_schedule(
     cron_schedule="30 9 * * 1-5",
     execution_timezone="America/New_York",
     name="fred_spot_prices_schedule",
+    default_status=dg.DefaultScheduleStatus.RUNNING,
 )
 def fred_spot_prices_schedule(
     context: dg.ScheduleEvaluationContext,
