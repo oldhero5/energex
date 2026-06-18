@@ -42,10 +42,80 @@ services:
         max-size: "10m"
         max-file: "5"
 
+  api:
+    # S2 read API: the read-only seam the (separate, private) frontend consumes.
+    # arcticdb (storage extra) has no linux/arm64 wheel -> build+run amd64 under emulation.
+    build:
+      context: .
+      args:
+        EXTRAS: "--extra service --extra storage"
+    image: ghcr.io/oldhero5/energex:api
+    platform: linux/amd64
+    container_name: energex-api
+    # full/api are the API's own profiles; `frontend` is added so `--profile frontend`
+    # also brings up the read API (and the MinIO chain below) the frontend depends on.
+    profiles: ["full", "api", "frontend"]
+    init: true
+    restart: unless-stopped
+    mem_limit: 1g
+    cpus: 1.0
+    command: ["uvicorn", "energex.service.readapi:app", "--host", "0.0.0.0", "--port", "8001", "--workers", "1"]
+    environment:
+      # In-network MinIO: containers reach MinIO at the compose service name, NOT localhost.
+      MINIO_ENDPOINT: minio:9000
+      ARCTIC_BUCKET: ${ARCTIC_BUCKET:-arctic}
+      # Scoped ArcticDB service account created by minio-init (NOT MinIO root); read-only API.
+      MINIO_ACCESS_KEY: ${ARCTIC_ACCESS_KEY:-energex-arctic}
+      MINIO_SECRET_KEY: ${ARCTIC_SECRET_KEY:-energex-arctic-secret}
+      TZ: UTC
+    ports:
+      - "8001:8001"
+    depends_on:
+      minio:
+        condition: service_healthy
+      minio-init:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8001/healthz').status==200 else 1)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
+
+  frontend:
+    # ./frontend is a SEPARATE PRIVATE repo checked out here. It is gitignored in this
+    # open-core repo, so this service is wired but INERT until that repo is present to
+    # build from. Run with: docker compose --profile frontend up (brings up the api too).
+    build: ./frontend
+    container_name: energex-frontend
+    profiles: ["frontend"]
+    init: true
+    restart: unless-stopped
+    mem_limit: 1g
+    cpus: 1.0
+    environment:
+      # The only contract between the repos: the S2 read API base URL (in-network).
+      ENERGEX_API_URL: http://api:8001
+    ports:
+      - "5173:5173"
+    depends_on:
+      api:
+        condition: service_healthy
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
+
   minio:
     image: quay.io/minio/minio:RELEASE.2025-04-22T22-12-26Z
     container_name: energex-minio
-    profiles: ["dev", "full"]
+    profiles: ["dev", "full", "frontend"]   # frontend -> api -> minio dependency chain
     init: true
     restart: unless-stopped
     command: server /data --console-address ":9001"
@@ -74,7 +144,7 @@ services:
   minio-init:
     image: quay.io/minio/mc:RELEASE.2025-04-16T18-13-26Z
     container_name: energex-minio-init
-    profiles: ["dev", "full"]
+    profiles: ["dev", "full", "frontend"]   # frontend -> api -> minio-init dependency chain
     init: true
     restart: "no"               # one-shot provisioner; unless-stopped would loop forever
     mem_limit: 256m
