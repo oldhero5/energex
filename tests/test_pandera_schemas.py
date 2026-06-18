@@ -8,7 +8,7 @@ from energex.core import quality, schemas
 from energex.core.exceptions import QualityGateError
 
 
-def test_all_six_schemas_present_and_named():
+def test_all_seven_schemas_present_and_named():
     expected = {
         "OHLCV": schemas.OHLCV,
         "DATED_CONTRACTS": schemas.DATED_CONTRACTS,
@@ -16,6 +16,7 @@ def test_all_six_schemas_present_and_named():
         "EIA_PETROLEUM": schemas.EIA_PETROLEUM,
         "ERCOT_DALMP": schemas.ERCOT_DALMP,
         "NOAA_HDDCDD": schemas.NOAA_HDDCDD,
+        "FRED_SPOT": schemas.FRED_SPOT,
     }
     for name, schema in expected.items():
         assert isinstance(schema, pa.DataFrameSchema)
@@ -137,6 +138,46 @@ def test_eia_petroleum_fail_empty_frame_blocked():
         quality.validate(frame, schemas.EIA_PETROLEUM, as_of=AS_OF)
     checks = ei.value.failures["check"].astype(str)
     assert checks.str.contains("row-count below floor").any()
+
+
+def _fred_frame(values, instrument_ids, valid_times):
+    return pd.DataFrame(
+        {
+            "instrument_id": instrument_ids,
+            "valid_time": pd.to_datetime(valid_times, utc=True),
+            "value": values,
+        }
+    )
+
+
+def test_fred_spot_pass_multi_instrument():
+    as_of = datetime(2026, 6, 17, 14, 30, tzinfo=timezone.utc)
+    frame = _fred_frame(
+        [84.65, 84.36, 3.06],
+        ["FRED.WTI.SPOT", "FRED.BRENT.SPOT", "FRED.HENRYHUB.SPOT"],
+        ["2026-06-15", "2026-06-15", "2026-06-15"],
+    )
+    out = quality.validate(frame, schemas.FRED_SPOT, as_of=as_of)
+    assert out["value"].dtype == "float64"
+    assert len(out) == 3
+
+
+def test_fred_spot_fail_negative_price_blocked():
+    as_of = datetime(2026, 6, 17, 14, 30, tzinfo=timezone.utc)
+    frame = _fred_frame([-1.0], ["FRED.WTI.SPOT"], ["2026-06-15"])
+    with pytest.raises(QualityGateError) as ei:
+        quality.validate(frame, schemas.FRED_SPOT, as_of=as_of)
+    assert ei.value.schema_name == "FRED_SPOT"
+    assert (ei.value.failures["column"] == "value").any()
+
+
+def test_fred_spot_fail_stale_valid_time_blocked():
+    as_of = datetime(2026, 6, 17, 14, 30, tzinfo=timezone.utc)
+    frame = _fred_frame([84.65], ["FRED.WTI.SPOT"], ["2026-05-01"])  # weeks stale
+    with pytest.raises(QualityGateError) as ei:
+        quality.validate(frame, schemas.FRED_SPOT, as_of=as_of)
+    checks = ei.value.failures["check"].astype(str)
+    assert checks.str.contains("staler than").any()
 
 
 def test_ercot_dalmp_pass_allows_negative_pricing():

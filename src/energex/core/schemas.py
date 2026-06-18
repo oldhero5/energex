@@ -148,6 +148,23 @@ EIA_PETROLEUM = DataFrameSchema(
     coerce=True,
 )
 
+# FRED publishes daily benchmark spot prices on business days only, with a few-business-day
+# lag (the latest available observation can be ~3-4 business days old). A 7-business-day
+# freshness bound covers that publication lag with margin.
+_FRED_FRESHNESS_DAYS = 7
+
+FRED_SPOT = DataFrameSchema(
+    name="FRED_SPOT",
+    columns={
+        "instrument_id": _id_col(),
+        "valid_time": _valid_time_col(),
+        "value": Column(float, Check.ge(0), nullable=False, coerce=True),
+    },
+    checks=[_unique_keys_check(), _row_floor_check(), _freshness_check(_FRED_FRESHNESS_DAYS)],
+    strict=False,
+    coerce=True,
+)
+
 ERCOT_DALMP = DataFrameSchema(
     name="ERCOT_DALMP",
     columns={
