@@ -31,6 +31,11 @@ logs/
 htmlcov/
 coverage.xml
 
+# Docusaurus site (website/)
+website/node_modules/
+website/build/
+website/.docusaurus/
+
 CLAUDE.md
 
 docs/superpowers/*
