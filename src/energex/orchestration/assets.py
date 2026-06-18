@@ -15,17 +15,24 @@ from energex.core.connectors.eia import (
     EiaGasStorageConnector,
     EiaPetroleumStatusConnector,
 )
+from energex.core.connectors.fred import FredConnector
 from energex.core.connectors.weather import NOAANClimDivConnector
 from energex.core.connectors.yfinance import YFinanceIntradayConnector
 from energex.orchestration.partitions import (
     EIA_GAS_WEEKLY,
     EIA_PETROLEUM_WEEKLY,
+    FRED_DAILY,
     NOAA_MONTHLY,
 )
 from energex.orchestration.resources import ArcticDBResource
 
 INTRADAY_LIBRARY = "prices.intraday"
 _LOOKBACK_DAYS = 2  # well within yfinance's ~7-day 1m cap
+
+SPOT_LIBRARY = "prices.spot"
+# Pull this many calendar days back per partition so the append-with-dedup write re-carries
+# FRED's few-business-day publication lag (idempotent across overlapping daily partitions).
+_FRED_LOOKBACK_DAYS = 10
 
 NOAA_LIBRARY = "weather"
 # Whole-file replace source: a partition older than this lag is a backfill of today's
@@ -78,6 +85,53 @@ def intraday_futures_bars(
             "source_url": dg.MetadataValue.url(result.source_url),
             "fetched_at": result.fetched_at.isoformat(),
             "library": INTRADAY_LIBRARY,
+            "symbols": dg.MetadataValue.json(sorted(versions)),
+            "versions": dg.MetadataValue.json(versions),
+            "rows_total": int(len(frame)),
+            "rows_by_symbol": dg.MetadataValue.json(rows_by_symbol),
+        }
+    )
+
+
+@dg.asset(
+    name="fred_spot_prices",
+    group_name="prices",
+    compute_kind="arcticdb",
+    partitions_def=FRED_DAILY,
+    description=(
+        "Daily WTI/Brent/Henry Hub benchmark spot prices (FRED) -> prices.spot "
+        "(degenerate, append-with-dedup; short publication-lag lookback)."
+    ),
+)
+def fred_spot_prices(
+    context: dg.AssetExecutionContext, arctic: ArcticDBResource
+) -> dg.MaterializeResult:
+    window = context.partition_time_window
+    end = window.start.date()  # the partition day (valid_time index)
+    start = end - timedelta(days=_FRED_LOOKBACK_DAYS)
+    result = FredConnector().fetch(start, end)
+
+    # SINGLE-SOURCED gate: the same core.quality.validate the asset_check re-runs.
+    # as_of = fetched_at = knowledge time (degenerate live capture).
+    frame = quality.validate(result.frame, schemas.FRED_SPOT, as_of=result.fetched_at)
+
+    lib = arctic.get_library(SPOT_LIBRARY)
+    versions: dict[str, int] = {}
+    rows_by_symbol: dict[str, int] = {}
+    for instrument_id, group in frame.groupby("instrument_id", sort=True):
+        library, symbol = symbology.resolve(str(instrument_id))
+        if library != SPOT_LIBRARY:
+            raise ValueError(f"{instrument_id} routes to {library!r}, not {SPOT_LIBRARY!r}")
+        versions[symbol] = storage.write_bars(lib, symbol, group, fetched_at=result.fetched_at)
+        rows_by_symbol[symbol] = int(len(group))
+
+    context.log.info("wrote %d FRED spot rows across %s", len(frame), sorted(rows_by_symbol))
+    return dg.MaterializeResult(
+        metadata={
+            "source": result.source,
+            "source_url": dg.MetadataValue.url(result.source_url),
+            "fetched_at": result.fetched_at.isoformat(),
+            "library": SPOT_LIBRARY,
             "symbols": dg.MetadataValue.json(sorted(versions)),
             "versions": dg.MetadataValue.json(versions),
             "rows_total": int(len(frame)),
@@ -248,6 +302,7 @@ def eia_petroleum_status(
 
 ASSETS: list[Any] = [
     intraday_futures_bars,
+    fred_spot_prices,
     noaa_degree_days,
     eia_gas_storage,
     eia_petroleum_status,

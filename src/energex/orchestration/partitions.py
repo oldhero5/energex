@@ -17,3 +17,8 @@ NOAA_MONTHLY = dg.MonthlyPartitionsDefinition(start_date="2020-01-01")
 # widens its pull >=5 weeks back to re-carry EIA's inline revisions (bitemporal_merge).
 EIA_GAS_WEEKLY = dg.WeeklyPartitionsDefinition(start_date="2020-01-02", day_offset=4)
 EIA_PETROLEUM_WEEKLY = dg.WeeklyPartitionsDefinition(start_date="2020-01-01", day_offset=3)
+
+# FRED daily benchmark spot prices. The partition key indexes the valid_time day; for the
+# degenerate stream it drives the as_of cadence. Each run pulls a short lookback window so
+# the append-with-dedup write re-carries FRED's few-business-day publication lag.
+FRED_DAILY = dg.DailyPartitionsDefinition(start_date="2020-01-01")

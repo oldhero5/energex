@@ -19,10 +19,16 @@ from energex.core.connectors.eia import (
     EiaGasStorageConnector,
     EiaPetroleumStatusConnector,
 )
+from energex.core.connectors.fred import INSTRUMENT_IDS as FRED_INSTRUMENT_IDS
 from energex.core.connectors.weather import INSTRUMENT_IDS as NOAA_INSTRUMENT_IDS
 from energex.core.connectors.yfinance import INSTRUMENT_IDS
 from energex.core.exceptions import QualityGateError
-from energex.orchestration.assets import EIA_LIBRARY, INTRADAY_LIBRARY, NOAA_LIBRARY
+from energex.orchestration.assets import (
+    EIA_LIBRARY,
+    INTRADAY_LIBRARY,
+    NOAA_LIBRARY,
+    SPOT_LIBRARY,
+)
 from energex.orchestration.resources import ArcticDBResource
 
 
@@ -106,6 +112,46 @@ def noaa_degree_days_pass_quality_gate(arctic: ArcticDBResource) -> dg.AssetChec
     )
 
 
+@dg.asset_check(
+    asset="fred_spot_prices",
+    name="fred_spot_prices_pass_quality_gate",
+    description="Read-back spot prices from prices.spot re-pass the core.quality FRED_SPOT gate.",
+)
+def fred_spot_prices_pass_quality_gate(arctic: ArcticDBResource) -> dg.AssetCheckResult:
+    lib = arctic.get_library(SPOT_LIBRARY)
+    frames: list[pd.DataFrame] = []
+    for instrument_id in FRED_INSTRUMENT_IDS:
+        _library, symbol = symbology.resolve(instrument_id)
+        if not lib.has_symbol(symbol):
+            continue
+        df = storage.read_as_of(lib, symbol)
+        if not df.empty:
+            frames.append(df)
+
+    if not frames:
+        return dg.AssetCheckResult(
+            passed=False, metadata={"reason": "no spot prices found in prices.spot"}
+        )
+
+    frame = pd.concat(frames, ignore_index=True)
+    frame["valid_time"] = pd.to_datetime(frame["valid_time"], utc=True)  # Arctic stripped tz
+    try:
+        validated = quality.validate(frame, schemas.FRED_SPOT, as_of=datetime.now(timezone.utc))
+    except QualityGateError as exc:
+        return dg.AssetCheckResult(
+            passed=False,
+            metadata={"schema": exc.schema_name, "failures": int(len(exc.failures))},
+        )
+
+    return dg.AssetCheckResult(
+        passed=True,
+        metadata={
+            "rows": int(len(validated)),
+            "symbols": dg.MetadataValue.json(sorted(validated["instrument_id"].unique().tolist())),
+        },
+    )
+
+
 def _eia_gate_readback(
     arctic: ArcticDBResource, instrument_ids: list[str], schema: Any, label: str
 ) -> dg.AssetCheckResult:
@@ -168,6 +214,7 @@ def eia_petroleum_status_pass_quality_gate(arctic: ArcticDBResource) -> dg.Asset
 
 CHECKS: list[Any] = [
     intraday_bars_pass_quality_gate,
+    fred_spot_prices_pass_quality_gate,
     noaa_degree_days_pass_quality_gate,
     eia_gas_storage_pass_quality_gate,
     eia_petroleum_status_pass_quality_gate,
