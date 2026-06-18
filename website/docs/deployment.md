@@ -43,7 +43,6 @@ State lives in named Docker volumes (only `docker compose down -v` deletes them)
 | `dagster-pg-data` | Dagster run/event/schedule history |
 | `dagster-home` | Dagster instance config + compute logs |
 | `neo4j-data` | The entity graph |
-| `energex-data` | The legacy service's DuckDB file |
 
 ## Secrets
 
@@ -64,10 +63,9 @@ Macs. It works; expect somewhat slower cold starts. The other services run nativ
 - Enable OrbStack's **"Start at login"** so the stack comes back after a reboot.
 - Prevent the Mac from sleeping for true 24/7 operation (`caffeinate`, or keep it
   plugged in with sleep disabled).
-- **Do not** place the legacy `energy.db` on a macOS bind mount — VirtioFS breaks
-  DuckDB's advisory locks and `fsync` (DuckDB issue #13017). It lives on the native
-  `energex-data` volume for exactly this reason. ArcticDB data lives in MinIO, not on a
-  bind mount, so it is unaffected.
+- Keep all state on **named Docker volumes**, never macOS bind mounts — VirtioFS is
+  unreliable for advisory locks and `fsync`. ArcticDB data lives in MinIO (the
+  `minio-data` volume), so it is unaffected.
 
 ## Configuration
 
@@ -85,7 +83,6 @@ lives in `src/energex/core/config.py`. The essentials:
 | `EIA_API_KEY`, `FRED_API_KEY`, `NOAA_TOKEN` | Source connector credentials |
 | `NEO4J_URI`, `NEO4J_USER`, `NEO4J_PASSWORD`, `NEO4J_AUTH` | Entity graph |
 | `DAGSTER_PG_USERNAME`, `DAGSTER_PG_PASSWORD`, `DAGSTER_PG_DB` | Dagster Postgres |
-| `ENERGEX_DB_PATH`, `TZ`, `ENERGEX_INGEST_CRON` | Legacy service |
 
 Containers reach MinIO by the compose **service name** (`minio:9000`), not `localhost`.
 The Dagster instance config and workspace are mounted read-only from

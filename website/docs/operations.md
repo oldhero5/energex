@@ -73,9 +73,9 @@ There are three independent stores to protect:
    This is operational metadata, not market data — lower priority than the store of
    record.
 
-3. **Legacy service DB → the `energex-data` volume.** The legacy FastAPI service exports
-   DuckDB snapshots (`EXPORT DATABASE`) to the `./backups` bind mount, which is visible on
-   the host.
+3. **Entity graph → the `neo4j-data` volume.** Back up Neo4j with `neo4j-admin database
+   dump` (or snapshot the volume) while the stack is quiesced. The graph only references
+   ArcticDB symbols, so it restores independently of the store of record.
 
 Restore is the reverse: stop the stack, restore the volume(s) or re-import the snapshot,
 and bring it back up. Because ArcticDB is content-versioned, a restored bucket replays its

@@ -77,7 +77,7 @@ owns the numbers.
 ### Run the always-on stack
 
 Requires Docker / OrbStack. The `full` profile brings up MinIO, Dagster (Postgres +
-webserver + daemon), Neo4j, and the legacy FastAPI service.
+webserver + daemon), Neo4j, and the S2 read API.
 
 ```bash
 cp .env.example .env        # fill in EIA_API_KEY and FRED_API_KEY (free); placeholders OK for the rest
