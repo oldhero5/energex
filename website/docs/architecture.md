@@ -25,7 +25,7 @@ The **S4 frontend** is a separate private repository — the commercial product.
 consumes only the S2 read API; neither repo imports the other. That clean seam is the
 open-core boundary (see the [Roadmap](./roadmap.md)).
 
-## The core is framework-agnostic — and CI enforces it
+## The core is framework-agnostic, and CI enforces it
 
 `energex.core` must never import an application framework. This is not a guideline; it is
 a test. `tests/test_core_has_no_framework_imports.py` walks every `.py` file under
