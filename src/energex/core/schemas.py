@@ -118,6 +118,12 @@ DATED_CONTRACTS = DataFrameSchema(
     coerce=True,
 )
 
+# EIA weekly series carry a Friday-period -> mid-next-week-release lag (gas storage
+# releases Thu, crude stocks Wed) plus a full 5-business-day inter-release gap, so the
+# latest available period can be ~9 business days old just before the next release.
+# A 10-business-day (two work-week) freshness bound covers the weekly cadence robustly.
+_EIA_FRESHNESS_DAYS = 10
+
 EIA_GAS_STORAGE = DataFrameSchema(
     name="EIA_GAS_STORAGE",
     columns={
@@ -125,7 +131,7 @@ EIA_GAS_STORAGE = DataFrameSchema(
         "valid_time": _valid_time_col(),
         "value": Column(float, Check.ge(0), nullable=False, coerce=True),
     },
-    checks=[_unique_keys_check(), _row_floor_check(), _freshness_check(6)],
+    checks=[_unique_keys_check(), _row_floor_check(), _freshness_check(_EIA_FRESHNESS_DAYS)],
     strict=False,
     coerce=True,
 )
@@ -137,7 +143,7 @@ EIA_PETROLEUM = DataFrameSchema(
         "valid_time": _valid_time_col(),
         "value": Column(float, Check.ge(0), nullable=False, coerce=True),
     },
-    checks=[_unique_keys_check(), _row_floor_check(), _freshness_check(6)],
+    checks=[_unique_keys_check(), _row_floor_check(), _freshness_check(_EIA_FRESHNESS_DAYS)],
     strict=False,
     coerce=True,
 )

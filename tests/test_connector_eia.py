@@ -193,7 +193,9 @@ def test_empty_response_yields_empty_typed_frame():
     respx.get(GAS_URL).mock(
         return_value=httpx.Response(200, json={"response": {"total": 0, "data": []}})
     )
-    frame = EiaGasStorageConnector(api_key="TESTKEY").fetch(date(2026, 6, 5), date(2026, 6, 12)).frame
+    frame = (
+        EiaGasStorageConnector(api_key="TESTKEY").fetch(date(2026, 6, 5), date(2026, 6, 12)).frame
+    )
     assert frame.empty
     assert list(frame.columns) == ["instrument_id", "valid_time", "value"]
     assert str(frame["valid_time"].dtype) == "datetime64[ns, UTC]"
