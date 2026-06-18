@@ -12,6 +12,7 @@ const sidebars: SidebarsConfig = {
     'deployment',
     'operations',
     'testing',
+    'frontend-integration',
     'roadmap',
   ],
 };
