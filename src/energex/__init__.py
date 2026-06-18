@@ -47,9 +47,19 @@ Configuration:
 For more examples, see: src/examples/
 """
 
-__version__ = "0.3.0"
+# Pin ArcticDB's vendored AWS C SDK ahead of pyarrow's (phase-0 load-order hazard):
+# whichever of libarrow / arcticdb_ext loads first wins the AWS symbols, and if
+# pyarrow wins, ArcticDB's S3 client constructor aborts the process on macOS. The
+# heavy imports below pull pyarrow, so arcticdb must load first. Best-effort: arcticdb
+# is the optional `storage` extra, so a core-only install skips this silently.
+try:
+    import arcticdb as _arcticdb  # noqa: F401
+except ImportError:
+    pass
+
+__version__ = "0.4.0"
 __author__ = "Marty H"
-__license__ = "MIT"
+__license__ = "PolyForm-Noncommercial-1.0.0"
 
 # Core modules
 # Analysis modules

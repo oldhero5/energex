@@ -5,7 +5,7 @@ import polars as pl
 
 # Naive intraday annualization factor (1-min bars assumed 24h session).
 # NOTE: methodology correctness (5-min sampling, session-gap masking, calendar-based
-# annualization, Yang-Zhang) is addressed separately in ASSESSMENT R7; this module
+# annualization, Yang-Zhang) is addressed by the daily estimators below; this module
 # only restores correct *execution* on the Polars 1.20 API (group_by has no .mutate;
 # use with_columns(expr.over('Symbol')) instead).
 _ANNUALIZE = float(np.sqrt(252 * 1440))
@@ -80,7 +80,7 @@ class VolatilityAnalyzer:
         )
 
     # ------------------------------------------------------------------
-    # Methodologically-correct estimators (ASSESSMENT R7)
+    # Methodologically-correct estimators
     # ------------------------------------------------------------------
     def realized_volatility_daily(self) -> pl.DataFrame:
         """Canonical daily realized volatility per symbol.

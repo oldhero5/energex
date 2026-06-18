@@ -1,11 +1,10 @@
 # src/energex/data_fetcher.py
 import logging
 import time
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 from typing import Any
 
 import polars as pl
-import pytz
 import yfinance as yf
 
 from energex.config import get_settings
@@ -64,7 +63,7 @@ class EnergyDataFetcher:
         settings = get_settings()
         self.timeout = settings.data_fetch.yfinance_timeout
         self.retries = max(1, settings.data_fetch.data_fetch_retries)
-        self.end_time = datetime.now(pytz.UTC)
+        self.end_time = datetime.now(timezone.utc)
         self.start_time = self.end_time - timedelta(days=1)
         self.dated_lookback_days = settings.data_fetch.dated_lookback_days
         self.dated_contract_count = settings.data_fetch.dated_contract_count
@@ -127,7 +126,7 @@ class EnergyDataFetcher:
         it never raises. Returns a frame with ``DAILY_CONTRACTS_COLUMNS``.
         """
         root = self.ENERGY_SYMBOLS[commodity]["ticker"].removesuffix("=F")
-        today = datetime.now(pytz.UTC).date()
+        today = datetime.now(timezone.utc).date()
         dfs: list[pl.DataFrame] = []
         for ticker, contract_month in _dated_tickers(root, today, self.dated_contract_count):
             try:

@@ -31,12 +31,12 @@ jobs:
       - uses: astral-sh/setup-uv@v5
         with:
           enable-cache: true
-      # Advisory: strict-mypy backlog is cleared progressively by the remediation
-      # PRs (ASSESSMENT R3/R9/R10/...). Flip to a hard gate once clean.
+      # Advisory: strict-mypy backlog is cleared progressively. Flip to a hard gate
+      # once clean.
       - name: mypy (advisory)
         run: >
           uv run --all-extras mypy src/energex
-          || echo "::warning::mypy reported errors (advisory; tracked in ASSESSMENT.md)"
+          || echo "::warning::mypy reported errors (advisory; mypy errors tracked separately)"
 
   test:
     name: Test (pytest)
@@ -51,6 +51,58 @@ jobs:
         with:
           enable-cache: true
       - run: uv run --all-extras --python ${{ matrix.python-version }} pytest
+
+  storage-gate:
+    name: Bitemporal storage gate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      - name: Bitemporal CI gate suite (offline LMDB ArcticDB)
+        run: >
+          uv run --extra storage --extra dev pytest -q
+          tests/test_storage_roundtrip.py
+          tests/test_storage_pointintime.py
+          tests/test_pointintime_reverse_backfill.py
+          tests/test_crash_safety.py
+          tests/test_write_bars_sparse.py
+          tests/test_revision_merge_gap.py
+          tests/test_latest_is_committed.py
+          tests/test_symbology.py
+
+  quality-gate:
+    name: Pandera quality gate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      - name: Pre-write quality-gate suite (pandera schemas)
+        run: >
+          uv run --extra quality --extra dev pytest -q
+          tests/test_pandera_schemas.py
+          tests/test_quality_collision.py
+          tests/test_exceptions.py
+
+  connector-gate:
+    name: Connector contract gate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      - name: connector contract tests (offline; mocked network seam)
+        run: >
+          uv run --extra storage --extra quality --extra service --extra dev pytest -q
+          tests/test_connector_yfinance.py
+          tests/test_connector_fred.py
+          tests/test_connector_eia.py
+          tests/test_connector_weather.py
+          tests/test_readapi.py
 
   secrets:
     name: Secret scan (gitleaks)

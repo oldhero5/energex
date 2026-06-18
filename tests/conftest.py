@@ -4,6 +4,16 @@ from __future__ import annotations
 
 from datetime import date, datetime, timedelta, timezone
 
+# NOTE: arcticdb MUST be imported before pandas/pyarrow process-wide (phase0 findings:
+# AWS-SDK symbol collision aborts the process on macOS otherwise). conftest loads before
+# any test module, so importing it here pins the load order for the whole suite.
+# Guarded so test jobs that don't install the `storage` extra (e.g. the quality gate)
+# can still collect their non-storage tests; the arctic_* fixtures only run when requested.
+try:
+    import arcticdb  # noqa: F401
+except ImportError:
+    arcticdb = None  # type: ignore[assignment]
+
 import polars as pl
 import pytest
 
@@ -12,8 +22,8 @@ import pytest
 def sample_ohlcv() -> pl.DataFrame:
     """A small, well-formed intraday OHLCV frame for two symbols (1-min bars).
 
-    Timestamps are naive to match the current ``intraday_prices`` schema; the
-    UTC-normalization work (ASSESSMENT R5) will migrate this to tz-aware.
+    Timestamps are naive to match the current ``intraday_prices`` schema; later
+    UTC-normalization work will migrate this to tz-aware.
     """
     base = datetime(2024, 1, 2, 14, 30)
     rows = []
@@ -78,3 +88,23 @@ def sample_daily_contracts() -> pl.DataFrame:
 def tmp_db_path(tmp_path) -> str:
     """An isolated DuckDB file path under tmp — never the repo's energy.db."""
     return str(tmp_path / "test_energy.db")
+
+
+@pytest.fixture
+def arctic_uri(tmp_path) -> str:
+    """A unique, offline LMDB-backed ArcticDB URI under pytest's tmp (no MinIO)."""
+    return f"lmdb://{tmp_path / 'energex-test-arctic'}"
+
+
+@pytest.fixture
+def arctic_store(arctic_uri):
+    """A fresh, isolated ArcticDB instance; LMDB files vacated with tmp_path."""
+    import arcticdb as adb
+
+    return adb.Arctic(arctic_uri)
+
+
+@pytest.fixture
+def arctic_lib(arctic_store):
+    """A single throwaway library; storage functions take the Library object directly."""
+    return arctic_store.create_library("phase2")

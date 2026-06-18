@@ -4,14 +4,14 @@ import polars as pl
 
 # These analytics require a real contract-month/expiry data model (and a spot leg /
 # risk-free curve) that the current single-table, continuous-front-month schema does
-# not provide. They are gated until that model lands (ASSESSMENT R8) so they fail
+# not provide. They are gated until that model lands so they fail
 # clearly instead of crashing on a missing 'expiry' column or invalid Polars APIs.
 _NEEDS_CONTRACT_MODEL = (
     "{name} requires a contract-month/expiry data model (dated contracts, and for "
     "carry/implied-rate a spot leg + risk-free curve); this FuturesAnalyzer only has "
     "continuous front-month proxies (CL=F/BZ=F/NG=F). For real dated-contract term "
     "structure, slope, and roll yield use energex.analysis.dated_futures."
-    "DatedFuturesAnalyzer over the daily_contracts table. See ASSESSMENT.md R8."
+    "DatedFuturesAnalyzer over the daily_contracts table."
 )
 
 
@@ -24,7 +24,7 @@ class FuturesAnalyzer:
 
         NOTE: with only continuous front-month proxies stored, this is an
         inter-instrument spread, not a true single-curve term structure (which needs
-        multiple dated contract months at the same instant — ASSESSMENT R8).
+        multiple dated contract months at the same instant).
         """
         front = self.df.filter(pl.col("Symbol") == front_month)
         back = self.df.filter(pl.col("Symbol") == back_month)
@@ -44,7 +44,7 @@ class FuturesAnalyzer:
 
         NOTE: a true basis needs a real cash/spot series (e.g. EIA/FRED) which is not
         ingested yet; passing two futures proxies gives an inter-instrument spread,
-        not spot-vs-futures basis (ASSESSMENT R8).
+        not spot-vs-futures basis.
         """
         spot = self.df.filter(pl.col("Symbol") == spot_symbol)
         futures = self.df.filter(pl.col("Symbol") == futures_symbol)

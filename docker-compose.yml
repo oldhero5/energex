@@ -1,31 +1,39 @@
 services:
-  energex:
-    build: .
-    image: ghcr.io/oldhero5/energex:local
-    container_name: energex
-    init: true                       # forward signals / reap zombies
-    restart: unless-stopped          # recovers on crash and when OrbStack starts
-    stop_grace_period: 30s           # let lifespan stop the scheduler + close the DB
-    env_file:
-      - .env                         # secrets/config at runtime, NOT baked into the image
+  api:
+    # S2 read API: the read-only seam the (separate, private) frontend consumes.
+    # arcticdb (storage extra) has no linux/arm64 wheel -> build+run amd64 under emulation.
+    build:
+      context: .
+      args:
+        EXTRAS: "--extra service --extra storage"
+    image: ghcr.io/oldhero5/energex:api
+    platform: linux/amd64
+    container_name: energex-api
+    # full/api are the API's own profiles; `frontend` is added so `--profile frontend`
+    # also brings up the read API (and the MinIO chain below) the frontend depends on.
+    profiles: ["full", "api", "frontend"]
+    init: true
+    restart: unless-stopped
+    mem_limit: 1g
+    cpus: 1.0
+    command: ["uvicorn", "energex.service.readapi:app", "--host", "0.0.0.0", "--port", "8001", "--workers", "1"]
     environment:
-      ENERGEX_DB_PATH: /data/energy.db
-      TZ: America/Chicago
-      LOG_LEVEL: INFO
-      ENERGEX_INGEST_CRON: "*/5 * * * *"
-      # Local LLM via Ollama (gemma3:4b). Reaches the host's Ollama from the container.
-      DEFAULT_LLM_PROVIDER: ollama
-      DEFAULT_LLM_MODEL: gemma3:4b
-      OLLAMA_BASE_URL: http://host.docker.internal:11434
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
+      # In-network MinIO: containers reach MinIO at the compose service name, NOT localhost.
+      MINIO_ENDPOINT: minio:9000
+      ARCTIC_BUCKET: ${ARCTIC_BUCKET:-arctic}
+      # Scoped ArcticDB service account created by minio-init (NOT MinIO root); read-only API.
+      MINIO_ACCESS_KEY: ${ARCTIC_ACCESS_KEY:-energex-arctic}
+      MINIO_SECRET_KEY: ${ARCTIC_SECRET_KEY:-energex-arctic-secret}
+      TZ: UTC
     ports:
-      - "8000:8000"
-    volumes:
-      - energex-data:/data          # NAMED volume (native ext4) -> durable DB + reliable locking
-      - ./backups:/backups          # bind mount for EXPORT DATABASE snapshots (visible on the Mac)
+      - "8001:8001"
+    depends_on:
+      minio:
+        condition: service_healthy
+      minio-init:
+        condition: service_completed_successfully
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8000/healthz').status==200 else 1)"]
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8001/healthz').status==200 else 1)"]
       interval: 30s
       timeout: 5s
       retries: 3
@@ -36,7 +44,264 @@ services:
         max-size: "10m"
         max-file: "5"
 
+  frontend:
+    # ./frontend is a SEPARATE PRIVATE repo checked out here. It is gitignored in this
+    # open-core repo, so this service is wired but INERT until that repo is present to
+    # build from. Run with: docker compose --profile frontend up (brings up the api too).
+    build: ./frontend
+    container_name: energex-frontend
+    profiles: ["frontend"]
+    init: true
+    restart: unless-stopped
+    mem_limit: 1g
+    cpus: 1.0
+    environment:
+      # The only contract between the repos: the S2 read API base URL (in-network).
+      ENERGEX_API_URL: http://api:8001
+    ports:
+      - "5173:5173"
+    depends_on:
+      api:
+        condition: service_healthy
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
+
+  minio:
+    image: quay.io/minio/minio:RELEASE.2025-04-22T22-12-26Z
+    container_name: energex-minio
+    profiles: ["dev", "full", "frontend"]   # frontend -> api -> minio dependency chain
+    init: true
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    mem_limit: 1g
+    cpus: 1.0
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin}
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - minio-data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
+
+  minio-init:
+    image: quay.io/minio/mc:RELEASE.2025-04-16T18-13-26Z
+    container_name: energex-minio-init
+    profiles: ["dev", "full", "frontend"]   # frontend -> api -> minio-init dependency chain
+    init: true
+    restart: "no"               # one-shot provisioner; unless-stopped would loop forever
+    mem_limit: 256m
+    cpus: 0.5
+    depends_on:
+      minio:
+        condition: service_healthy
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin}
+      ARCTIC_ACCESS_KEY: ${ARCTIC_ACCESS_KEY:-energex-arctic}
+      ARCTIC_SECRET_KEY: ${ARCTIC_SECRET_KEY:-energex-arctic-secret}
+    volumes:
+      - ./deploy/minio:/policies:ro
+    entrypoint: >
+      /bin/sh -c "
+      mc alias set local http://minio:9000 \"$$MINIO_ROOT_USER\" \"$$MINIO_ROOT_PASSWORD\" &&
+      mc mb --ignore-existing local/arctic &&
+      (mc admin policy create local arctic-rw /policies/arctic-rw.json || true) &&
+      (mc admin user svcacct add --access-key \"$$ARCTIC_ACCESS_KEY\" --secret-key \"$$ARCTIC_SECRET_KEY\" --policy /policies/arctic-rw.json local \"$$MINIO_ROOT_USER\" || true)
+      "
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
+
+  dagster-postgres:
+    image: postgres:16.4
+    container_name: energex-dagster-pg
+    profiles: ["dev", "full"]
+    init: true
+    restart: unless-stopped
+    mem_limit: 512m
+    cpus: 0.5
+    environment:
+      POSTGRES_USER: ${DAGSTER_PG_USERNAME:-dagster}
+      POSTGRES_PASSWORD: ${DAGSTER_PG_PASSWORD:-dagster}
+      POSTGRES_DB: ${DAGSTER_PG_DB:-dagster}
+    volumes:
+      - dagster-pg-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
+
+  dagster-webserver:
+    # arcticdb (storage extra) has no linux/arm64 wheel -> build+run amd64 under emulation.
+    build:
+      context: .
+      args:
+        EXTRAS: "--extra orchestration --extra storage --extra quality --extra graph"
+    image: ghcr.io/oldhero5/energex:dagster
+    platform: linux/amd64
+    container_name: energex-dagster-webserver
+    profiles: ["dev", "full"]
+    init: true
+    restart: unless-stopped
+    mem_limit: 1g
+    cpus: 1.0
+    command: ["dagster-webserver", "-h", "0.0.0.0", "-p", "3000", "-w", "/opt/dagster/home/workspace.yaml"]
+    env_file:
+      - .env                         # connector API keys (EIA_API_KEY, FRED_API_KEY); .env is dockerignored
+    environment:
+      DAGSTER_HOME: /opt/dagster/home
+      DAGSTER_PG_HOST: dagster-postgres
+      DAGSTER_PG_USERNAME: ${DAGSTER_PG_USERNAME:-dagster}
+      DAGSTER_PG_PASSWORD: ${DAGSTER_PG_PASSWORD:-dagster}
+      DAGSTER_PG_DB: ${DAGSTER_PG_DB:-dagster}
+      # In-network MinIO: containers reach MinIO at the compose service name, NOT localhost.
+      MINIO_ENDPOINT: minio:9000
+      ARCTIC_BUCKET: ${ARCTIC_BUCKET:-arctic}
+      # Scoped ArcticDB service account created by minio-init (NOT MinIO root).
+      MINIO_ACCESS_KEY: ${ARCTIC_ACCESS_KEY:-energex-arctic}
+      MINIO_SECRET_KEY: ${ARCTIC_SECRET_KEY:-energex-arctic-secret}
+      # Entity graph (Neo4jResource forward-compat).
+      NEO4J_URI: bolt://neo4j:7687
+      NEO4J_USER: neo4j
+      NEO4J_PASSWORD: ${NEO4J_PASSWORD:-energex-neo4j}
+      TZ: UTC
+    ports:
+      - "3000:3000"
+    volumes:
+      - dagster-home:/opt/dagster/home
+      - ./deploy/dagster/dagster.yaml:/opt/dagster/home/dagster.yaml:ro
+      - ./deploy/dagster/workspace.yaml:/opt/dagster/home/workspace.yaml:ro
+    depends_on:
+      dagster-postgres:
+        condition: service_healthy
+      minio-init:
+        condition: service_completed_successfully
+    healthcheck:
+      # slim image has no curl; use python urllib (matches the energex service healthcheck).
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:3000/server_info').status==200 else 1)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
+
+  dagster-daemon:
+    # Shares the amd64 dagster image (arcticdb has no linux/arm64 wheel).
+    build:
+      context: .
+      args:
+        EXTRAS: "--extra orchestration --extra storage --extra quality --extra graph"
+    image: ghcr.io/oldhero5/energex:dagster
+    platform: linux/amd64
+    container_name: energex-dagster-daemon
+    profiles: ["dev", "full"]
+    init: true
+    restart: unless-stopped
+    mem_limit: 1g
+    cpus: 1.0
+    command: ["dagster-daemon", "run", "-w", "/opt/dagster/home/workspace.yaml"]
+    env_file:
+      - .env                         # connector API keys (EIA_API_KEY, FRED_API_KEY); .env is dockerignored
+    environment:
+      DAGSTER_HOME: /opt/dagster/home
+      DAGSTER_PG_HOST: dagster-postgres
+      DAGSTER_PG_USERNAME: ${DAGSTER_PG_USERNAME:-dagster}
+      DAGSTER_PG_PASSWORD: ${DAGSTER_PG_PASSWORD:-dagster}
+      DAGSTER_PG_DB: ${DAGSTER_PG_DB:-dagster}
+      # In-network MinIO: containers reach MinIO at the compose service name, NOT localhost.
+      MINIO_ENDPOINT: minio:9000
+      ARCTIC_BUCKET: ${ARCTIC_BUCKET:-arctic}
+      # Scoped ArcticDB service account created by minio-init (NOT MinIO root).
+      MINIO_ACCESS_KEY: ${ARCTIC_ACCESS_KEY:-energex-arctic}
+      MINIO_SECRET_KEY: ${ARCTIC_SECRET_KEY:-energex-arctic-secret}
+      # Entity graph (Neo4jResource forward-compat).
+      NEO4J_URI: bolt://neo4j:7687
+      NEO4J_USER: neo4j
+      NEO4J_PASSWORD: ${NEO4J_PASSWORD:-energex-neo4j}
+      TZ: UTC
+    volumes:
+      - dagster-home:/opt/dagster/home
+      - ./deploy/dagster/dagster.yaml:/opt/dagster/home/dagster.yaml:ro
+      - ./deploy/dagster/workspace.yaml:/opt/dagster/home/workspace.yaml:ro
+    depends_on:
+      dagster-postgres:
+        condition: service_healthy
+      minio-init:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD-SHELL", "dagster-daemon liveness-check"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
+
+  neo4j:
+    image: neo4j:5.26.0-community
+    container_name: energex-neo4j
+    profiles: ["full"]
+    init: true
+    restart: unless-stopped
+    mem_limit: 2g
+    cpus: 1.5
+    environment:
+      NEO4J_AUTH: ${NEO4J_AUTH:-neo4j/energex-neo4j}
+      NEO4J_server_memory_heap_initial__size: "512m"
+      NEO4J_server_memory_heap_max__size: "512m"
+      NEO4J_server_memory_pagecache_size: "512m"
+    ports:
+      - "7474:7474"
+      - "7687:7687"
+    volumes:
+      - neo4j-data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:7474 >/dev/null 2>&1 || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
+
 volumes:
-  energex-data:                      # survives `compose down` / OrbStack restart (only `down -v` deletes it)
+  minio-data:                        # ArcticDB store of record (separate volume from Postgres)
+  dagster-pg-data:                   # Dagster instance storage (separate volume from MinIO)
+  dagster-home:                      # shared DAGSTER_HOME (instance config + compute logs)
+  neo4j-data:                        # entity graph
 # OrbStack notes: enable "Start at login" and prevent Mac sleep (caffeinate / stay plugged in) for true 24/7.
 # Do NOT put energy.db on a macOS bind mount — VirtioFS breaks DuckDB advisory locks/fsync (DuckDB#13017).

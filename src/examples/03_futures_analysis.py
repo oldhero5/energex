@@ -70,7 +70,7 @@ print(spread.select(["Datetime", "spread", "spread_pct"]).tail(5))
 
 print(
     "\nNote: true term-structure / roll-yield / implied-rate analytics need dated\n"
-    "contract months + a spot leg (see ASSESSMENT.md R8); those methods raise\n"
+    "contract months + a spot leg; those methods raise\n"
     "NotImplementedError until a licensed dated-contract source is wired."
 )
 print("\n" + "=" * 70)

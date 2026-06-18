@@ -2,7 +2,8 @@
 
 A DataSource returns standardized OHLCV frames (UTC instants, the canonical column
 set) so the rest of energex is decoupled from any single vendor. yfinance becomes one
-opt-in adapter among licensed alternatives (ASSESSMENT R14).
+opt-in adapter among licensed/production alternatives (Databento GLBX.MDP3 for CL/NG;
+ICE/Refinitiv for Brent).
 """
 
 from abc import ABC, abstractmethod
