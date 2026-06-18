@@ -7,7 +7,13 @@ from datetime import date, datetime, timedelta, timezone
 # NOTE: arcticdb MUST be imported before pandas/pyarrow process-wide (phase0 findings:
 # AWS-SDK symbol collision aborts the process on macOS otherwise). conftest loads before
 # any test module, so importing it here pins the load order for the whole suite.
-import arcticdb  # noqa: F401
+# Guarded so test jobs that don't install the `storage` extra (e.g. the quality gate)
+# can still collect their non-storage tests; the arctic_* fixtures only run when requested.
+try:
+    import arcticdb  # noqa: F401
+except ImportError:
+    arcticdb = None  # type: ignore[assignment]
+
 import polars as pl
 import pytest
 

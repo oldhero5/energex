@@ -1,6 +1,7 @@
 """The orchestration.Definitions must build, wire the intraday slice, and validate."""
 
 import subprocess
+import sys
 
 import dagster as dg
 
@@ -28,10 +29,12 @@ def test_definitions_builds_with_intraday_slice():
 
 
 def test_dagster_definitions_validate_cli():
+    # Invoke dagster via the current interpreter so it uses THIS test environment
+    # (with the orchestration extra) rather than re-resolving a fresh default env.
     result = subprocess.run(
         [
-            "uv",
-            "run",
+            sys.executable,
+            "-m",
             "dagster",
             "definitions",
             "validate",
