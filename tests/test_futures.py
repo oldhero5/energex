@@ -26,7 +26,7 @@ def test_basis_risk_computes_spread(sample_ohlcv):
     ],
 )
 def test_expiry_dependent_methods_raise_not_implemented(sample_ohlcv, call):
-    # These require a contract-month/expiry data model (R8) that does not exist yet;
+    # These require a contract-month/expiry data model that does not exist yet;
     # they must fail clearly rather than crash deep in Polars on a missing column.
     with pytest.raises(NotImplementedError):
         call(FuturesAnalyzer(sample_ohlcv))

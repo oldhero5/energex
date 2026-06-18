@@ -32,3 +32,7 @@ htmlcov/
 coverage.xml
 
 CLAUDE.md
+
+docs/superpowers/*
+
+energex-ingestion-spec.md

@@ -191,5 +191,6 @@ class MarketVisualizer:
         """Plot the futures curve by expiry — gated until the contract-month data
         model exists (this needs an 'expiry' column the schema does not have; R8)."""
         raise NotImplementedError(
-            "plot_futures_curve requires a contract-month/expiry data model (see ASSESSMENT.md R8)."
+            "plot_futures_curve requires a dated-contract/expiry data model "
+            "(use DatedFuturesAnalyzer over the daily_contracts table)."
         )

@@ -31,12 +31,12 @@ jobs:
       - uses: astral-sh/setup-uv@v5
         with:
           enable-cache: true
-      # Advisory: strict-mypy backlog is cleared progressively by the remediation
-      # PRs (ASSESSMENT R3/R9/R10/...). Flip to a hard gate once clean.
+      # Advisory: strict-mypy backlog is cleared progressively. Flip to a hard gate
+      # once clean.
       - name: mypy (advisory)
         run: >
           uv run --all-extras mypy src/energex
-          || echo "::warning::mypy reported errors (advisory; tracked in ASSESSMENT.md)"
+          || echo "::warning::mypy reported errors (advisory; mypy errors tracked separately)"
 
   test:
     name: Test (pytest)

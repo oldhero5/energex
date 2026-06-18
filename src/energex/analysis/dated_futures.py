@@ -4,7 +4,7 @@
 Unlike :class:`energex.analysis.futures.FuturesAnalyzer` (which only has continuous
 front-month proxies), this operates on real dated contracts (``daily_contracts`` rows)
 so the forward curve, slope, roll yield, and curve shape are genuine cross-sectional
-quantities at a single point in time (ASSESSMENT R8).
+quantities at a single point in time.
 """
 
 from datetime import date
