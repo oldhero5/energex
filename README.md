@@ -164,4 +164,10 @@ Contributions are welcome! Please read our [Contributing Guidelines](CONTRIBUTIN
 
 ## License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+Energex is **source-available** under the [PolyForm Noncommercial License 1.0.0](LICENSE).
+
+- **Free** for noncommercial use — personal, research, educational, hobby, nonprofit, and government.
+- **Commercial use requires a paid license.** A commercial offering is in development; contact <oldhero5@proton.me> for commercial licensing.
+- If you use Energex in published, academic, or research work, please **cite it** — see [CITATION.cff](CITATION.cff).
+
+> This is a *source-available* license, not an OSI-approved "open source" license, because it restricts commercial use. Versions previously released under the MIT License remain available under MIT.
