@@ -14,7 +14,7 @@ def test_all_seven_schemas_present_and_named():
         "DATED_CONTRACTS": schemas.DATED_CONTRACTS,
         "EIA_GAS_STORAGE": schemas.EIA_GAS_STORAGE,
         "EIA_PETROLEUM": schemas.EIA_PETROLEUM,
-        "ERCOT_DALMP": schemas.ERCOT_DALMP,
+        "ERCOT_SPP": schemas.ERCOT_SPP,
         "NOAA_HDDCDD": schemas.NOAA_HDDCDD,
         "FRED_SPOT": schemas.FRED_SPOT,
     }
@@ -180,31 +180,33 @@ def test_fred_spot_fail_stale_valid_time_blocked():
     assert checks.str.contains("staler than").any()
 
 
-def test_ercot_dalmp_pass_allows_negative_pricing():
+def test_ercot_spp_pass_allows_negative_pricing():
     frame = pd.DataFrame(
         {
-            "instrument_id": ["ERCOT.DALMP.HB_HOUSTON", "ERCOT.DALMP.HB_HOUSTON"],
+            "instrument_id": ["ERCOT.SPP.HB_HOUSTON", "ERCOT.SPP.HB_HOUSTON"],
             "valid_time": pd.to_datetime(
                 ["2026-06-10T00:00:00Z", "2026-06-10T01:00:00Z"], utc=True
             ),
-            "lmp": [-15.0, 42.5],  # negative LMP is real and must pass
+            "settlement_point": ["HB_HOUSTON", "HB_HOUSTON"],
+            "price": [-15.0, 42.5],  # negative pricing is real and must pass
         }
     )
-    out = quality.validate(frame, schemas.ERCOT_DALMP, as_of=AS_OF)
+    out = quality.validate(frame, schemas.ERCOT_SPP, as_of=AS_OF)
     assert len(out) == 2
 
 
-def test_ercot_dalmp_fail_absurd_lmp_blocked():
+def test_ercot_spp_fail_absurd_price_blocked():
     frame = pd.DataFrame(
         {
-            "instrument_id": ["ERCOT.DALMP.HB_HOUSTON"],
+            "instrument_id": ["ERCOT.SPP.HB_HOUSTON"],
             "valid_time": pd.to_datetime(["2026-06-10T00:00:00Z"], utc=True),
-            "lmp": [999_999.0],  # outside the sane band
+            "settlement_point": ["HB_HOUSTON"],
+            "price": [999_999.0],  # outside the sane band
         }
     )
     with pytest.raises(QualityGateError) as ei:
-        quality.validate(frame, schemas.ERCOT_DALMP, as_of=AS_OF)
-    assert (ei.value.failures["column"] == "lmp").any()
+        quality.validate(frame, schemas.ERCOT_SPP, as_of=AS_OF)
+    assert (ei.value.failures["column"] == "price").any()
 
 
 def test_noaa_hddcdd_pass_coerces_sentinel_to_null():
@@ -315,3 +317,40 @@ def test_power_gen_by_fuel_uniqueness_includes_fuel_type():
     dup.loc[1, "fuel_type"] = "NG"
     with pytest.raises(QualityGateError):
         quality.validate(dup, schemas.POWER_GEN_BY_FUEL, as_of=as_of)
+
+
+def test_ercot_spp_schema_passes():
+    import pandas as pd
+
+    from energex.core import quality, schemas
+
+    as_of = pd.Timestamp("2026-06-19T12:00:00Z").to_pydatetime()
+    frame = pd.DataFrame(
+        {
+            "instrument_id": ["ERCOT.SPP.HB_HOUSTON", "ERCOT.SPP.HB_HOUSTON"],
+            "valid_time": pd.to_datetime(["2026-06-19T09:00Z", "2026-06-19T10:00Z"], utc=True),
+            "settlement_point": ["HB_HOUSTON", "HB_HOUSTON"],
+            "price": [42.5, 38.9],
+        }
+    )
+    assert len(quality.validate(frame, schemas.ERCOT_SPP, as_of=as_of)) == 2
+
+
+def test_ercot_fuelmix_uniqueness_includes_fuel_type():
+    import pandas as pd
+    import pytest
+
+    from energex.core import quality, schemas
+    from energex.core.exceptions import QualityGateError
+
+    as_of = pd.Timestamp("2026-06-19T12:00:00Z").to_pydatetime()
+    dup = pd.DataFrame(
+        {
+            "instrument_id": ["ERCOT.FUELMIX.ERCOT", "ERCOT.FUELMIX.ERCOT"],
+            "valid_time": pd.to_datetime(["2026-06-19T10:00Z", "2026-06-19T10:00Z"], utc=True),
+            "fuel_type": ["GAS", "GAS"],
+            "value": [30000.0, 30000.0],
+        }
+    )
+    with pytest.raises(QualityGateError):
+        quality.validate(dup, schemas.ERCOT_FUELMIX, as_of=as_of)

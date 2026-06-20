@@ -188,15 +188,41 @@ FRED_SPOT = DataFrameSchema(
     coerce=True,
 )
 
-ERCOT_DALMP = DataFrameSchema(
-    name="ERCOT_DALMP",
+ERCOT_SPP = DataFrameSchema(
+    name="ERCOT_SPP",
     columns={
         "instrument_id": _id_col(),
         "valid_time": _valid_time_col(),
-        # Sane day-ahead LMP band ($/MWh): negative pricing happens; cap absurd values.
-        "lmp": Column(float, Check.in_range(-250.0, 5000.0), nullable=False, coerce=True),
+        "settlement_point": Column(str, nullable=False),
+        # Settlement Point Price band ($/MWh): ERCOT allows -$251 floor / $5000 cap.
+        "price": Column(float, Check.in_range(-251.0, 5001.0), nullable=False, coerce=True),
     },
-    checks=[_unique_keys_check(), _row_floor_check(), _freshness_check(3)],
+    checks=[_unique_keys_check(), _row_floor_check(), _freshness_check(2)],
+    strict=False,
+    coerce=True,
+)
+
+ERCOT_LOAD = DataFrameSchema(
+    name="ERCOT_LOAD",
+    columns={
+        "instrument_id": _id_col(),
+        "valid_time": _valid_time_col(),
+        "value": Column(float, Check.in_range(0.0, 200_000.0), nullable=False, coerce=True),
+    },
+    checks=[_unique_keys_check(), _row_floor_check(), _freshness_check(2)],
+    strict=False,
+    coerce=True,
+)
+
+ERCOT_FUELMIX = DataFrameSchema(
+    name="ERCOT_FUELMIX",
+    columns={
+        "instrument_id": _id_col(),
+        "valid_time": _valid_time_col(),
+        "fuel_type": Column(str, nullable=False),
+        "value": Column(float, Check.in_range(-10_000.0, 200_000.0), nullable=True, coerce=True),
+    },
+    checks=[_unique_keys_check_with(("fuel_type",)), _row_floor_check(), _freshness_check(2)],
     strict=False,
     coerce=True,
 )
