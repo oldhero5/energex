@@ -229,10 +229,70 @@ def eia_petroleum_status_pass_quality_gate(arctic: ArcticDBResource) -> dg.Asset
     )
 
 
+def _power_gate_readback(
+    arctic: ArcticDBResource, libraries: list[str], schema: Any, label: str
+) -> dg.AssetCheckResult:
+    """Read back every symbol across the given power libraries and re-run the gate."""
+    frames: list[pd.DataFrame] = []
+    for library in libraries:
+        lib = arctic.get_library(library)
+        for symbol in lib.list_symbols():
+            if symbol.endswith("__vintages"):  # skip the version-index sidecars
+                continue
+            df = storage.read_as_of(lib, symbol)
+            if not df.empty:
+                frames.append(df)
+    if not frames:
+        return dg.AssetCheckResult(passed=False, metadata={"reason": f"no {label} found"})
+    frame = pd.concat(frames, ignore_index=True)
+    frame["valid_time"] = pd.to_datetime(frame["valid_time"], utc=True)
+    as_of = _committed_as_of(frame)
+    try:
+        validated = quality.validate(frame, schema, as_of=as_of)
+    except QualityGateError as exc:
+        return dg.AssetCheckResult(
+            passed=False,
+            metadata={"schema": exc.schema_name, "failures": int(len(exc.failures))},
+        )
+    return dg.AssetCheckResult(
+        passed=True,
+        metadata={"rows": int(len(validated)), "symbols": int(frame["instrument_id"].nunique())},
+    )
+
+
+@dg.asset_check(
+    asset="eia930_region",
+    name="eia930_region_pass_quality_gate",
+    description="Read-back EIA-930 region series re-pass the POWER_REGION gate.",
+)
+def eia930_region_pass_quality_gate(arctic: ArcticDBResource) -> dg.AssetCheckResult:
+    return _power_gate_readback(
+        arctic,
+        ["power.demand", "power.demand_forecast", "power.generation", "power.interchange"],
+        schemas.POWER_REGION,
+        "EIA-930 region series",
+    )
+
+
+@dg.asset_check(
+    asset="eia930_generation_by_fuel",
+    name="eia930_generation_by_fuel_pass_quality_gate",
+    description="Read-back EIA-930 by-fuel generation re-pass the POWER_GEN_BY_FUEL gate.",
+)
+def eia930_generation_by_fuel_pass_quality_gate(
+    arctic: ArcticDBResource,
+) -> dg.AssetCheckResult:
+    return _power_gate_readback(
+        arctic, ["power.generation_by_fuel"], schemas.POWER_GEN_BY_FUEL, "EIA-930 by-fuel"
+    )
+
+
 CHECKS: list[Any] = [
     intraday_bars_pass_quality_gate,
     fred_spot_prices_pass_quality_gate,
     noaa_degree_days_pass_quality_gate,
     eia_gas_storage_pass_quality_gate,
     eia_petroleum_status_pass_quality_gate,
+    eia930_region_pass_quality_gate,
+    eia930_generation_by_fuel_pass_quality_gate,
 ]
