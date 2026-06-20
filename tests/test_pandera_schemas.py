@@ -251,3 +251,67 @@ def test_freshness_fail_stale_valid_time_blocked():
         quality.validate(frame, schemas.EIA_GAS_STORAGE, as_of=AS_OF)
     checks = ei.value.failures["check"].astype(str)
     assert checks.str.contains("staler than").any()
+
+
+def test_power_region_schema_passes_and_freshness():
+    import pandas as pd
+
+    from energex.core import quality, schemas
+
+    as_of = pd.Timestamp("2026-06-19T12:00:00Z").to_pydatetime()
+    frame = pd.DataFrame(
+        {
+            "instrument_id": ["EIA930.D.ERCO", "EIA930.D.ERCO"],
+            "valid_time": pd.to_datetime(["2026-06-19T09:00Z", "2026-06-19T10:00Z"], utc=True),
+            "respondent": ["ERCO", "ERCO"],
+            "value": [55000.0, 56000.0],
+        }
+    )
+    out = quality.validate(frame, schemas.POWER_REGION, as_of=as_of)
+    assert len(out) == 2
+
+
+def test_power_region_allows_negative_interchange_and_nulls():
+    import numpy as np
+    import pandas as pd
+
+    from energex.core import quality, schemas
+
+    as_of = pd.Timestamp("2026-06-19T12:00:00Z").to_pydatetime()
+    frame = pd.DataFrame(
+        {
+            "instrument_id": ["EIA930.TI.ERCO", "EIA930.TI.ERCO"],
+            "valid_time": pd.to_datetime(["2026-06-19T09:00Z", "2026-06-19T10:00Z"], utc=True),
+            "respondent": ["ERCO", "ERCO"],
+            "value": [-1200.0, np.nan],
+        }
+    )
+    out = quality.validate(frame, schemas.POWER_REGION, as_of=as_of)
+    assert len(out) == 2
+
+
+def test_power_gen_by_fuel_uniqueness_includes_fuel_type():
+    import pandas as pd
+    import pytest
+
+    from energex.core import quality, schemas
+    from energex.core.exceptions import QualityGateError
+
+    as_of = pd.Timestamp("2026-06-19T12:00:00Z").to_pydatetime()
+    # Same (instrument_id, valid_time) but different fuel_type is VALID.
+    ok = pd.DataFrame(
+        {
+            "instrument_id": ["EIA930.GEN_FUEL.ERCO", "EIA930.GEN_FUEL.ERCO"],
+            "valid_time": pd.to_datetime(["2026-06-19T10:00Z", "2026-06-19T10:00Z"], utc=True),
+            "respondent": ["ERCO", "ERCO"],
+            "fuel_type": ["NG", "WND"],
+            "value": [30000.0, 12000.0],
+        }
+    )
+    assert len(quality.validate(ok, schemas.POWER_GEN_BY_FUEL, as_of=as_of)) == 2
+
+    # Duplicate (instrument_id, valid_time, fuel_type) FAILS.
+    dup = ok.copy()
+    dup.loc[1, "fuel_type"] = "NG"
+    with pytest.raises(QualityGateError):
+        quality.validate(dup, schemas.POWER_GEN_BY_FUEL, as_of=as_of)

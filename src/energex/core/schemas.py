@@ -81,6 +81,18 @@ def _unique_keys_check() -> Check:
     return Check(_check, error="(instrument_id, valid_time) is not unique")
 
 
+def _unique_keys_check_with(extra_cols: tuple[str, ...]) -> Check:
+    """Wide check: (instrument_id, valid_time, *extra_cols) must be unique."""
+    keys = ["instrument_id", "valid_time", *extra_cols]
+
+    def _check(df: pd.DataFrame) -> bool:
+        if set(keys) - set(df.columns):
+            return False
+        return not df.duplicated(subset=keys).any()
+
+    return Check(_check, error=f"{tuple(keys)} is not unique")
+
+
 def _row_floor_check(min_rows: int = 1) -> Check:
     """Wide check: empty (or below-floor) frames fail."""
 
@@ -185,6 +197,37 @@ ERCOT_DALMP = DataFrameSchema(
         "lmp": Column(float, Check.in_range(-250.0, 5000.0), nullable=False, coerce=True),
     },
     checks=[_unique_keys_check(), _row_floor_check(), _freshness_check(3)],
+    strict=False,
+    coerce=True,
+)
+
+# EIA-930 hourly grid monitor. value: MWh (demand/generation) or net MWh (interchange,
+# signed); EIA publishes gaps as null. Hourly data finalizes within ~1 day -> 2-bday bound.
+_POWER_BAND = Check.in_range(-10_000_000.0, 10_000_000.0)
+
+POWER_REGION = DataFrameSchema(
+    name="POWER_REGION",
+    columns={
+        "instrument_id": _id_col(),
+        "valid_time": _valid_time_col(),
+        "respondent": Column(str, nullable=False),
+        "value": Column(float, _POWER_BAND, nullable=True, coerce=True),
+    },
+    checks=[_unique_keys_check(), _row_floor_check(), _freshness_check(2)],
+    strict=False,
+    coerce=True,
+)
+
+POWER_GEN_BY_FUEL = DataFrameSchema(
+    name="POWER_GEN_BY_FUEL",
+    columns={
+        "instrument_id": _id_col(),
+        "valid_time": _valid_time_col(),
+        "respondent": Column(str, nullable=False),
+        "fuel_type": Column(str, nullable=False),
+        "value": Column(float, _POWER_BAND, nullable=True, coerce=True),
+    },
+    checks=[_unique_keys_check_with(("fuel_type",)), _row_floor_check(), _freshness_check(2)],
     strict=False,
     coerce=True,
 )
