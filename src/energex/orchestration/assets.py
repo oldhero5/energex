@@ -16,6 +16,7 @@ from energex.core.connectors.eia import (
     EiaPetroleumStatusConnector,
 )
 from energex.core.connectors.eia930 import Eia930FuelConnector, Eia930RegionConnector
+from energex.core.connectors.ercot import ErcotSppConnector
 from energex.core.connectors.fred import FredConnector
 from energex.core.connectors.weather import NOAANClimDivConnector
 from energex.core.connectors.yfinance import YFinanceIntradayConnector
@@ -23,6 +24,7 @@ from energex.orchestration.partitions import (
     EIA930_DAILY,
     EIA_GAS_WEEKLY,
     EIA_PETROLEUM_WEEKLY,
+    ERCOT_DAILY,
     FRED_DAILY,
     NOAA_MONTHLY,
 )
@@ -381,6 +383,48 @@ def eia930_generation_by_fuel(
     return _write_power_degenerate(context, arctic, result, schemas.POWER_GEN_BY_FUEL, None)
 
 
+ERCOT_LMP_LIBRARY = "power.lmp"
+
+
+@dg.asset(
+    name="ercot_spp",
+    group_name="power",
+    compute_kind="arcticdb",
+    partitions_def=ERCOT_DAILY,
+    description="ERCOT RT+DA settlement point prices -> power.lmp (bitemporal_merge).",
+)
+def ercot_spp(context: dg.AssetExecutionContext, arctic: ArcticDBResource) -> dg.MaterializeResult:
+    window = context.partition_time_window
+    result = ErcotSppConnector().fetch(window.start.date(), window.end.date())
+    frame = quality.validate(result.frame, schemas.ERCOT_SPP, as_of=result.fetched_at)
+    lib = arctic.get_library(ERCOT_LMP_LIBRARY)
+    versions: dict[str, int] = {}
+    for instrument_id, group in frame.groupby("instrument_id", sort=True):
+        _library, symbol = symbology.resolve(str(instrument_id))
+        versions[symbol] = storage.commit_vintage(
+            lib,
+            symbol,
+            group,
+            as_of=result.fetched_at,
+            source=result.source,
+            source_url=result.source_url,
+            fetched_at=result.fetched_at,
+            mode=symbology.revision_mode(str(instrument_id)),
+            reconstructed=False,
+        )
+    context.log.info("ERCOT SPP committed %d rows across %s", len(frame), sorted(versions))
+    return dg.MaterializeResult(
+        metadata={
+            "source": result.source,
+            "source_url": dg.MetadataValue.url(result.source_url),
+            "fetched_at": result.fetched_at.isoformat(),
+            "library": ERCOT_LMP_LIBRARY,
+            "rows_total": int(len(frame)),
+            "versions": dg.MetadataValue.json(versions),
+        }
+    )
+
+
 ASSETS: list[Any] = [
     intraday_futures_bars,
     fred_spot_prices,
@@ -389,4 +433,5 @@ ASSETS: list[Any] = [
     eia_petroleum_status,
     eia930_region,
     eia930_generation_by_fuel,
+    ercot_spp,
 ]

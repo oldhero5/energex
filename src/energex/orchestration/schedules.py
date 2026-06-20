@@ -17,6 +17,7 @@ from energex.orchestration.assets import (
     eia930_region,
     eia_gas_storage,
     eia_petroleum_status,
+    ercot_spp,
     fred_spot_prices,
     noaa_degree_days,
 )
@@ -24,6 +25,7 @@ from energex.orchestration.partitions import (
     EIA930_DAILY,
     EIA_GAS_WEEKLY,
     EIA_PETROLEUM_WEEKLY,
+    ERCOT_DAILY,
     FRED_DAILY,
     NOAA_MONTHLY,
 )
@@ -127,10 +129,28 @@ def eia930_schedule(
     return _latest_partition_request(context, EIA930_DAILY)
 
 
+_ercot_spp_job = dg.define_asset_job("ercot_spp_job", selection=dg.AssetSelection.assets(ercot_spp))
+
+
+# Dormant until ERCOT creds land: STOPPED by default so ticks do not fire failing runs.
+@dg.schedule(
+    job=_ercot_spp_job,
+    cron_schedule="15 * * * *",
+    execution_timezone="America/Chicago",
+    name="ercot_spp_schedule",
+    default_status=dg.DefaultScheduleStatus.STOPPED,
+)
+def ercot_spp_schedule(
+    context: dg.ScheduleEvaluationContext,
+) -> dg.RunRequest | dg.SkipReason:
+    return _latest_partition_request(context, ERCOT_DAILY)
+
+
 SCHEDULES: list[Any] = [
     eia_gas_storage_schedule,
     eia_petroleum_status_schedule,
     noaa_degree_days_schedule,
     fred_spot_prices_schedule,
     eia930_schedule,
+    ercot_spp_schedule,
 ]

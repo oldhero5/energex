@@ -27,3 +27,6 @@ FRED_DAILY = dg.DailyPartitionsDefinition(start_date="2020-01-01")
 # pulls a short lookback so the degenerate append-with-dedup re-carries EIA's inline
 # revisions. The hourly schedule re-materializes the latest (today's) partition.
 EIA930_DAILY = dg.DailyPartitionsDefinition(start_date="2023-06-01")
+
+# ERCOT nodal daily partition (forward-fill; no nodal backfill this slice).
+ERCOT_DAILY = dg.DailyPartitionsDefinition(start_date="2026-06-01")

@@ -288,6 +288,15 @@ def eia930_generation_by_fuel_pass_quality_gate(
     )
 
 
+@dg.asset_check(
+    asset="ercot_spp",
+    name="ercot_spp_pass_quality_gate",
+    description="Read-back ERCOT SPP re-pass the ERCOT_SPP gate.",
+)
+def ercot_spp_pass_quality_gate(arctic: ArcticDBResource) -> dg.AssetCheckResult:
+    return _power_gate_readback(arctic, ["power.lmp"], schemas.ERCOT_SPP, "ERCOT SPP")
+
+
 CHECKS: list[Any] = [
     intraday_bars_pass_quality_gate,
     fred_spot_prices_pass_quality_gate,
@@ -296,4 +305,5 @@ CHECKS: list[Any] = [
     eia_petroleum_status_pass_quality_gate,
     eia930_region_pass_quality_gate,
     eia930_generation_by_fuel_pass_quality_gate,
+    ercot_spp_pass_quality_gate,
 ]
