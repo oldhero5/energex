@@ -15,10 +15,12 @@ from energex.core.connectors.eia import (
     EiaGasStorageConnector,
     EiaPetroleumStatusConnector,
 )
+from energex.core.connectors.eia930 import Eia930FuelConnector, Eia930RegionConnector
 from energex.core.connectors.fred import FredConnector
 from energex.core.connectors.weather import NOAANClimDivConnector
 from energex.core.connectors.yfinance import YFinanceIntradayConnector
 from energex.orchestration.partitions import (
+    EIA930_DAILY,
     EIA_GAS_WEEKLY,
     EIA_PETROLEUM_WEEKLY,
     FRED_DAILY,
@@ -44,6 +46,9 @@ EIA_LIBRARY = "fundamentals.eia"
 # is a backfill of already-released (revised) data — a reconstructed baseline, not a true
 # live capture (spec §5.6 honesty boundary).
 _EIA_LIVE_GRACE = timedelta(days=10)
+
+# EIA-930 degenerate (latest-wins) hourly grid monitor; one library per series.
+_EIA930_LOOKBACK_DAYS = 2
 
 
 @dg.asset(
@@ -300,10 +305,80 @@ def eia_petroleum_status(
     return _commit_eia(context, arctic, EiaPetroleumStatusConnector(), schemas.EIA_PETROLEUM)
 
 
+def _write_power_degenerate(
+    context: dg.AssetExecutionContext, arctic: ArcticDBResource, result, schema, group_keys,
+) -> dg.MaterializeResult:
+    """Gate -> per-symbol degenerate write_bars for an EIA-930 frame (all BAs)."""
+    frame = quality.validate(result.frame, schema, as_of=result.fetched_at)
+    versions: dict[str, int] = {}
+    rows_by_symbol: dict[str, int] = {}
+    libs: dict[str, Any] = {}
+    for instrument_id, group in frame.groupby("instrument_id", sort=True):
+        library, symbol = symbology.resolve(str(instrument_id))
+        lib = libs.get(library) or libs.setdefault(library, arctic.get_library(library))
+        versions[f"{library}:{symbol}"] = storage.write_bars(
+            lib, symbol, group, fetched_at=result.fetched_at
+        )
+        rows_by_symbol[f"{library}:{symbol}"] = int(len(group))
+    context.log.info("EIA-930 wrote %d rows across %d symbols", len(frame), len(versions))
+    return dg.MaterializeResult(
+        metadata={
+            "source": result.source,
+            "source_url": dg.MetadataValue.url(result.source_url),
+            "fetched_at": result.fetched_at.isoformat(),
+            "rows_total": int(len(frame)),
+            "symbols": dg.MetadataValue.json(sorted(versions)),
+            "versions": dg.MetadataValue.json(versions),
+        }
+    )
+
+
+@dg.asset(
+    name="eia930_region",
+    group_name="power",
+    compute_kind="arcticdb",
+    partitions_def=EIA930_DAILY,
+    description=(
+        "EIA-930 hourly demand/forecast/net-generation/interchange for all balancing "
+        "authorities -> power.{demand,demand_forecast,generation,interchange} (degenerate)."
+    ),
+)
+def eia930_region(
+    context: dg.AssetExecutionContext, arctic: ArcticDBResource
+) -> dg.MaterializeResult:
+    window = context.partition_time_window
+    end = window.end.date()
+    start = window.start.date() - timedelta(days=_EIA930_LOOKBACK_DAYS)
+    result = Eia930RegionConnector().fetch(start, end)
+    return _write_power_degenerate(context, arctic, result, schemas.POWER_REGION, None)
+
+
+@dg.asset(
+    name="eia930_generation_by_fuel",
+    group_name="power",
+    compute_kind="arcticdb",
+    partitions_def=EIA930_DAILY,
+    description=(
+        "EIA-930 hourly net generation by fuel type for all balancing authorities -> "
+        "power.generation_by_fuel (degenerate)."
+    ),
+)
+def eia930_generation_by_fuel(
+    context: dg.AssetExecutionContext, arctic: ArcticDBResource
+) -> dg.MaterializeResult:
+    window = context.partition_time_window
+    end = window.end.date()
+    start = window.start.date() - timedelta(days=_EIA930_LOOKBACK_DAYS)
+    result = Eia930FuelConnector().fetch(start, end)
+    return _write_power_degenerate(context, arctic, result, schemas.POWER_GEN_BY_FUEL, None)
+
+
 ASSETS: list[Any] = [
     intraday_futures_bars,
     fred_spot_prices,
     noaa_degree_days,
     eia_gas_storage,
     eia_petroleum_status,
+    eia930_region,
+    eia930_generation_by_fuel,
 ]
