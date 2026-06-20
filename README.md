@@ -3,11 +3,15 @@
 A self-hosted, always-on energy-market data platform with a **bitemporal
 (point-in-time-correct) store of record**.
 
-Energex continuously ingests public energy data — EIA fundamentals, NOAA weather,
-FRED benchmark spot prices, and (in development) intraday futures — validates every
-batch through a quality gate, and commits it to a versioned ArcticDB store on MinIO.
-The store remembers not just *what* a value was, but *when each value became known*,
-so you can reconstruct exactly what the data looked like at any past moment.
+Energex is focused on **power markets**. It continuously ingests the EIA-930 Hourly
+Electric Grid Monitor (demand, day-ahead forecast, net generation, interchange, and
+generation-by-fuel for every US balancing authority), with NOAA weather and gas/oil
+fundamentals (EIA, FRED) as supporting context. An ERCOT nodal connector (RT + DA
+settlement point prices) is built and ships dormant until its OAuth credentials are
+supplied. Every batch is validated through a quality gate and committed to a versioned
+ArcticDB store on MinIO. The store remembers not just *what* a value was, but *when each
+value became known*, so you can reconstruct exactly what the data looked like at any past
+moment.
 
 ## Why point-in-time matters
 

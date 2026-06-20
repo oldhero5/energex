@@ -6,19 +6,58 @@ sidebar_label: Data Sources & Connectors
 
 # Data Sources & Connectors
 
-Energex ingests four live sources today, each through a dedicated connector in
+Energex is focused on **power markets**, with weather and gas/oil fundamentals as
+supporting context. Each source is ingested through a dedicated connector in
 `energex.core.connectors`. A connector is responsible for one thing: pull a window from a
 source and return a normalized `FetchResult`. It knows nothing about storage or Dagster.
 
-## Live sources
+## Power sources
 
 | Source | Connector class | ArcticDB library | Cadence | Revision mode |
 | --- | --- | --- | --- | --- |
-| **EIA v2** — Lower-48 working gas in storage | `EiaGasStorageConnector` | `fundamentals.eia` | Weekly (Thu) | `bitemporal_merge` |
-| **EIA v2** — U.S. crude stocks ex-SPR | `EiaPetroleumStatusConnector` | `fundamentals.eia` | Weekly (Wed) | `bitemporal_merge` |
+| **EIA-930** — hourly demand / day-ahead forecast / net generation / interchange (all BAs) | `Eia930RegionConnector` | `power.demand`, `power.demand_forecast`, `power.generation`, `power.interchange` | Hourly | `degenerate` |
+| **EIA-930** — hourly net generation by fuel type (all BAs) | `Eia930FuelConnector` | `power.generation_by_fuel` | Hourly | `degenerate` |
+| **ERCOT** — RT + DA settlement point prices | `ErcotSppConnector` | `power.lmp` | Hourly *(creds-pending)* | `bitemporal_merge` |
+
+ERCOT is **built and offline-tested but dormant** until its OAuth credentials
+(`ERCOT_USERNAME` / `ERCOT_PASSWORD` / `ERCOT_SUBSCRIPTION_KEY`) are provided; the
+connector fails fast with a clear message and the schedule ships `STOPPED` so no failing
+runs fire. EIA-930 needs only the existing `EIA_API_KEY`.
+
+## Supporting sources (deprioritized)
+
+Oil & gas and weather remain ingested but are no longer the focus:
+
+| Source | Connector class | ArcticDB library | Cadence | Revision mode |
+| --- | --- | --- | --- | --- |
 | **NOAA nClimDiv** — HDD/CDD by region | `NOAANClimDivConnector` | `weather` | Monthly | `bitemporal_replace` |
 | **FRED** — WTI / Brent / Henry Hub spot | `FredConnector` | `prices.spot` | Daily (weekdays) | `degenerate` |
+| **EIA v2** — Lower-48 working gas in storage | `EiaGasStorageConnector` | `fundamentals.eia` | Weekly (Thu) | `bitemporal_merge` |
+| **EIA v2** — U.S. crude stocks ex-SPR | `EiaPetroleumStatusConnector` | `fundamentals.eia` | Weekly (Wed) | `bitemporal_merge` |
 | **yfinance** — front-month CL/BZ/NG intraday | `YFinanceIntradayConnector` | `prices.intraday` | Manual (dev only) | `degenerate` |
+
+### EIA-930 hourly grid monitor
+
+EIA's Hourly Electric Grid Monitor (the EIA-930 dataset) is the core power feed, served by
+two EIA v2 routes for **every US balancing authority** (~60–70 BAs):
+
+- `electricity/rto/region-data` — demand (`D`), day-ahead forecast (`DF`), net generation
+  (`NG`), and total interchange (`TI`) → instruments `EIA930.{D,DF,NG,TI}.<BA>`.
+- `electricity/rto/fuel-type-data` — net generation by fuel type →
+  `EIA930.GEN_FUEL.<BA>` (carrying a `fuel_type` column).
+
+Each series is its own library; the symbol is the BA code (e.g. `erco`, `ciso`). The data
+is hourly and finalizes within about a day, so the asset writes `degenerate`
+(append-with-dedup, latest-wins) over a short re-pull window. A `~3-year` backfill seeds
+history; an hourly schedule keeps it current.
+
+### ERCOT nodal (creds-pending)
+
+ERCOT's public API authenticates via OAuth2 (username/password + subscription key) and
+serves nodal reports. `ErcotSppConnector` covers RT + DA settlement point prices →
+`power.lmp` (one symbol per settlement point). SPPs can be restated, so the asset commits
+`bitemporal_merge`. The connector is fully implemented and unit-tested against recorded
+payloads; it activates the moment the ERCOT credentials are added.
 
 ### EIA fundamentals
 
@@ -100,6 +139,12 @@ This module is framework- **and** storage-agnostic — it must not import `arcti
    # energex/core/symbology.py
    "EIA.NG.STORAGE.LOWER48": ("fundamentals.eia", "ng_storage_lower48", "bitemporal_merge"),
    ```
+
+   For high-cardinality namespaces (e.g. the ~60–70 EIA-930 balancing authorities)
+   enumerating every symbol is brittle. Instead add a prefix to `_POWER_PREFIX` and let
+   `resolve()` route by rule (`EIA930.<SERIES>.<BA>` → library + lowercased BA symbol).
+   Because the bare symbol then drops its routing prefix, storage takes the mode
+   explicitly via `mode_for_library()` rather than the symbol-based reverse lookup.
 
 2. **Define a pandera schema** for the connector's output frame in
    `energex.core.schemas` (column names, dtypes, nullability, ranges). The quality gate
