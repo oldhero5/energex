@@ -10,6 +10,16 @@ Energex is built in stages. S1 (the data platform: core, storage, orchestration)
 complete and is what this documentation describes. The remaining stages are reserved in
 the package layout and summarized below.
 
+## Focus: power markets
+
+Energex is centered on **power markets**. The **EIA-930 Hourly Electric Grid Monitor**
+(demand, day-ahead forecast, net generation, interchange, and generation-by-fuel for all
+US balancing authorities) ingests hourly today. The **ERCOT** nodal connector (RT + DA
+settlement point prices) is built and offline-tested, dormant until its OAuth credentials
+are supplied. Oil & gas and weather remain ingested as supporting context but are no
+longer the focus. Next on the power track: activating ERCOT once creds land, then ERCOT
+system load + fuel mix, and additional ISOs (CAISO, PJM, MISO).
+
 ## S2 — Serving (read API)
 
 A FastAPI read API in `energex.service`, with **`as_of` as a first-class parameter on

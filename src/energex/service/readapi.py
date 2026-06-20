@@ -25,8 +25,9 @@ import arcticdb  # noqa: F401
 import pandas as pd
 from fastapi import FastAPI, HTTPException, Query
 
-from energex.core import storage
+from energex.core import storage, symbology
 from energex.core.config import get_settings
+from energex.core.exceptions import SymbologyError
 
 logger = logging.getLogger(__name__)
 
@@ -156,7 +157,13 @@ def create_app() -> FastAPI:
         when = _parse_dt(as_of, "as_of")
         lo, hi = _parse_dt(start, "start"), _parse_dt(end, "end")
         date_range = (lo, hi) if (lo is not None or hi is not None) else None
-        df = storage.read_as_of(lib, symbol, as_of=when, date_range=date_range)
+        # Mode is a property of the library; pass it so high-cardinality power.*
+        # symbols (bare BA/settlement-point codes) need not be in the static index.
+        try:
+            mode = symbology.mode_for_library(library)
+        except SymbologyError:
+            mode = None  # unknown library -> fall back to symbol-based routing
+        df = storage.read_as_of(lib, symbol, as_of=when, date_range=date_range, mode=mode)
         return _records(df)
 
     @app.get("/curve")
