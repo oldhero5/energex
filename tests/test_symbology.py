@@ -56,3 +56,16 @@ def test_unknown_power_prefix_raises():
 
     with pytest.raises(SymbologyError):
         symbology.resolve("EIA930.ZZ.ERCO")
+
+
+def test_mode_for_library_routes_power_by_library():
+    # Mode is a property of the library, so bare BA/settlement-point symbols route
+    # without being in the static reverse index.
+    assert symbology.mode_for_library("power.demand") == "degenerate"
+    assert symbology.mode_for_library("power.generation_by_fuel") == "degenerate"
+    assert symbology.mode_for_library("power.lmp") == "bitemporal_merge"
+
+
+def test_mode_for_library_unknown_raises():
+    with pytest.raises(SymbologyError):
+        symbology.mode_for_library("power.nope")

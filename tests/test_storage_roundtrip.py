@@ -24,6 +24,27 @@ def _frame() -> pd.DataFrame:
     )
 
 
+def test_power_degenerate_bare_symbol_roundtrip(arctic_lib):
+    """A bare BA symbol (e.g. 'aeci') is NOT in the static reverse index, so write/read
+    must route by the explicit library mode — the path the live EIA-930 ingest uses."""
+    as_of = datetime(2026, 6, 19, 12, 0, tzinfo=timezone.utc)
+    frame = pd.DataFrame(
+        {
+            "instrument_id": ["EIA930.D.AECI", "EIA930.D.AECI"],
+            "valid_time": [
+                datetime(2026, 6, 19, 9, 0, tzinfo=timezone.utc),
+                datetime(2026, 6, 19, 10, 0, tzinfo=timezone.utc),
+            ],
+            "respondent": ["AECI", "AECI"],
+            "value": [3100.0, 3200.0],
+        }
+    )
+    v = storage.write_bars(arctic_lib, "aeci", frame, fetched_at=as_of, mode="degenerate")
+    assert isinstance(v, int)
+    rb = storage.read_as_of(arctic_lib, "aeci", mode="degenerate")
+    assert len(rb) == 2
+
+
 def test_storage_roundtrip(arctic_lib):
     as_of = datetime(2024, 2, 5, 16, 0, tzinfo=timezone.utc)
     v = storage.commit_vintage(

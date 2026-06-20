@@ -321,7 +321,11 @@ def _write_power_degenerate(
         library, symbol = symbology.resolve(str(instrument_id))
         lib = libs.get(library) or libs.setdefault(library, arctic.get_library(library))
         versions[f"{library}:{symbol}"] = storage.write_bars(
-            lib, symbol, group, fetched_at=result.fetched_at
+            lib,
+            symbol,
+            group,
+            fetched_at=result.fetched_at,
+            mode=symbology.mode_for_library(library),
         )
         rows_by_symbol[f"{library}:{symbol}"] = int(len(group))
     context.log.info("EIA-930 wrote %d rows across %d symbols", len(frame), len(versions))

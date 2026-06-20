@@ -128,3 +128,13 @@ def library_for_symbol(symbol: str) -> str:
         return _BY_SYMBOL[symbol][0]
     except KeyError as exc:
         raise SymbologyError(f"unknown symbol {symbol!r}") from exc
+
+
+def mode_for_library(library: str) -> str:
+    """Revision mode implied by a library. Mode is a property of the library (the
+    single source is LIBRARY_MODE), so high-cardinality power libraries whose bare
+    BA/settlement-point symbols are not in the static reverse index route by library."""
+    try:
+        return LIBRARY_MODE[library]
+    except KeyError as exc:
+        raise SymbologyError(f"unknown library {library!r}") from exc

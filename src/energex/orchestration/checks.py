@@ -236,10 +236,11 @@ def _power_gate_readback(
     frames: list[pd.DataFrame] = []
     for library in libraries:
         lib = arctic.get_library(library)
+        mode = symbology.mode_for_library(library)
         for symbol in lib.list_symbols():
             if symbol.endswith("__vintages"):  # skip the version-index sidecars
                 continue
-            df = storage.read_as_of(lib, symbol)
+            df = storage.read_as_of(lib, symbol, mode=mode)
             if not df.empty:
                 frames.append(df)
     if not frames:
