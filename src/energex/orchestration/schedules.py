@@ -13,12 +13,15 @@ from typing import Any
 import dagster as dg
 
 from energex.orchestration.assets import (
+    eia930_generation_by_fuel,
+    eia930_region,
     eia_gas_storage,
     eia_petroleum_status,
     fred_spot_prices,
     noaa_degree_days,
 )
 from energex.orchestration.partitions import (
+    EIA930_DAILY,
     EIA_GAS_WEEKLY,
     EIA_PETROLEUM_WEEKLY,
     FRED_DAILY,
@@ -37,6 +40,10 @@ _noaa_job = dg.define_asset_job(
 )
 _fred_job = dg.define_asset_job(
     "fred_spot_prices_job", selection=dg.AssetSelection.assets(fred_spot_prices)
+)
+_eia930_job = dg.define_asset_job(
+    "eia930_job",
+    selection=dg.AssetSelection.assets(eia930_region, eia930_generation_by_fuel),
 )
 
 
@@ -106,9 +113,24 @@ def fred_spot_prices_schedule(
     return _latest_partition_request(context, FRED_DAILY)
 
 
+# EIA-930 lands hourly with a ~1-2h lag; re-materialize today's partition every hour.
+@dg.schedule(
+    job=_eia930_job,
+    cron_schedule="20 * * * *",
+    execution_timezone="America/New_York",
+    name="eia930_schedule",
+    default_status=dg.DefaultScheduleStatus.RUNNING,
+)
+def eia930_schedule(
+    context: dg.ScheduleEvaluationContext,
+) -> dg.RunRequest | dg.SkipReason:
+    return _latest_partition_request(context, EIA930_DAILY)
+
+
 SCHEDULES: list[Any] = [
     eia_gas_storage_schedule,
     eia_petroleum_status_schedule,
     noaa_degree_days_schedule,
     fred_spot_prices_schedule,
+    eia930_schedule,
 ]

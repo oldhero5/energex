@@ -53,7 +53,7 @@ _EIA930_LOOKBACK_DAYS = 2
 
 @dg.asset(
     name="intraday_futures_bars",
-    group_name="prices",
+    group_name="prices_legacy",
     compute_kind="arcticdb",
     description=(
         "Front-month CL/BZ/NG 1-minute OHLCV bars (yfinance) -> prices.intraday "
@@ -275,7 +275,7 @@ def _commit_eia(
 
 @dg.asset(
     name="eia_gas_storage",
-    group_name="fundamentals",
+    group_name="fundamentals_legacy",
     compute_kind="arcticdb",
     partitions_def=EIA_GAS_WEEKLY,
     description=(
@@ -291,7 +291,7 @@ def eia_gas_storage(
 
 @dg.asset(
     name="eia_petroleum_status",
-    group_name="fundamentals",
+    group_name="fundamentals_legacy",
     compute_kind="arcticdb",
     partitions_def=EIA_PETROLEUM_WEEKLY,
     description=(
