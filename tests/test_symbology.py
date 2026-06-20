@@ -34,3 +34,25 @@ def test_unknown_identifiers_raise():
         symbology.mode_for_symbol("not_a_symbol")
     with pytest.raises(SymbologyError):
         symbology.contracts_for("unobtanium")
+
+
+def test_power_region_routing():
+    from energex.core import symbology
+
+    assert symbology.resolve("EIA930.D.ERCO") == ("power.demand", "erco")
+    assert symbology.resolve("EIA930.DF.CISO") == ("power.demand_forecast", "ciso")
+    assert symbology.resolve("EIA930.NG.PJM") == ("power.generation", "pjm")
+    assert symbology.resolve("EIA930.TI.MISO") == ("power.interchange", "miso")
+    assert symbology.resolve("EIA930.GEN_FUEL.SWPP") == ("power.generation_by_fuel", "swpp")
+    assert symbology.revision_mode("EIA930.D.ERCO") == "degenerate"
+    assert symbology.revision_mode("EIA930.GEN_FUEL.SWPP") == "degenerate"
+
+
+def test_unknown_power_prefix_raises():
+    import pytest
+
+    from energex.core import symbology
+    from energex.core.exceptions import SymbologyError
+
+    with pytest.raises(SymbologyError):
+        symbology.resolve("EIA930.ZZ.ERCO")
