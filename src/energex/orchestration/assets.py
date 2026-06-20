@@ -306,7 +306,11 @@ def eia_petroleum_status(
 
 
 def _write_power_degenerate(
-    context: dg.AssetExecutionContext, arctic: ArcticDBResource, result, schema, group_keys,
+    context: dg.AssetExecutionContext,
+    arctic: ArcticDBResource,
+    result,
+    schema,
+    group_keys,
 ) -> dg.MaterializeResult:
     """Gate -> per-symbol degenerate write_bars for an EIA-930 frame (all BAs)."""
     frame = quality.validate(result.frame, schema, as_of=result.fetched_at)

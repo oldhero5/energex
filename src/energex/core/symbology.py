@@ -77,6 +77,7 @@ def _resolve_power(instrument_id: str) -> tuple[str, str, str] | None:
     library, mode = entry
     return (library, tail.lower(), mode)
 
+
 # commodity -> ordered list of contract SYMBOL strings (used by read_curve).
 _CONTRACTS: dict[str, list[str]] = {
     "crude": ["CL_CLF26", "CL_CLG26"],

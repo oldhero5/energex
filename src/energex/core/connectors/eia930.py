@@ -103,9 +103,7 @@ class _Eia930Connector:
         # (The literal param name "api_key" contains the letter the leak-check forbids,
         # so we mark redaction with a param name free of it.)
         redacted = {key: val for key, val in params.items() if key != "api_key"}
-        source_url = str(
-            httpx.Request("GET", url, params={"auth": "REDACTED", **redacted}).url
-        )
+        source_url = str(httpx.Request("GET", url, params={"auth": "REDACTED", **redacted}).url)
         return FetchResult(
             frame=frame,
             source=self.source,
@@ -156,7 +154,10 @@ class Eia930RegionConnector(_Eia930Connector):
         df = pd.DataFrame(rows)
         out = pd.DataFrame(
             {
-                "instrument_id": "EIA930." + df["type"].astype(str) + "." + df["respondent"].astype(str),
+                "instrument_id": "EIA930."
+                + df["type"].astype(str)
+                + "."
+                + df["respondent"].astype(str),
                 "valid_time": _to_valid_time(df["period"]),
                 "respondent": df["respondent"].astype(str),
                 "value": pd.to_numeric(df["value"], errors="coerce").astype("float64"),
@@ -194,8 +195,6 @@ class Eia930FuelConnector(_Eia930Connector):
                 "value": pd.to_numeric(df["value"], errors="coerce").astype("float64"),
             }
         )
-        out = out.drop_duplicates(
-            subset=["instrument_id", "valid_time", "fuel_type"], keep="last"
-        )
+        out = out.drop_duplicates(subset=["instrument_id", "valid_time", "fuel_type"], keep="last")
         out = out.sort_values(["instrument_id", "valid_time", "fuel_type"]).reset_index(drop=True)
         return out[cols]
