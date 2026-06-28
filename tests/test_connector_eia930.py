@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, timedelta
 
 import httpx
 import pytest
@@ -15,13 +15,17 @@ from energex.core.connectors.eia930 import Eia930FuelConnector, Eia930RegionConn
 REGION_URL = "https://api.eia.gov/v2/electricity/rto/region-data/data/"
 FUEL_URL = "https://api.eia.gov/v2/electricity/rto/fuel-type-data/data/"
 
+# Hour-of-yesterday period keeps fixtures inside the 2-business-day freshness gate
+# regardless of when the suite runs.
+_PERIOD = f"{(date.today() - timedelta(days=1)).isoformat()}T10"
+
 _REGION_PAGE = {
     "response": {
         "total": 3,
         "data": [
-            {"period": "2026-06-18T10", "respondent": "ERCO", "type": "D", "value": "56000"},
-            {"period": "2026-06-18T10", "respondent": "ERCO", "type": "DF", "value": "55000"},
-            {"period": "2026-06-18T10", "respondent": "CISO", "type": "TI", "value": "-1200"},
+            {"period": _PERIOD, "respondent": "ERCO", "type": "D", "value": "56000"},
+            {"period": _PERIOD, "respondent": "ERCO", "type": "DF", "value": "55000"},
+            {"period": _PERIOD, "respondent": "CISO", "type": "TI", "value": "-1200"},
         ],
     }
 }
@@ -29,8 +33,8 @@ _FUEL_PAGE = {
     "response": {
         "total": 2,
         "data": [
-            {"period": "2026-06-18T10", "respondent": "ERCO", "fueltype": "NG", "value": "30000"},
-            {"period": "2026-06-18T10", "respondent": "ERCO", "fueltype": "WND", "value": "12000"},
+            {"period": _PERIOD, "respondent": "ERCO", "fueltype": "NG", "value": "30000"},
+            {"period": _PERIOD, "respondent": "ERCO", "fueltype": "WND", "value": "12000"},
         ],
     }
 }
