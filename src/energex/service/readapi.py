@@ -13,6 +13,7 @@ app (``energex.service.app``) and APScheduler were removed; this is the S2 repla
 
 from __future__ import annotations
 
+import hmac
 import json
 import logging
 import os
@@ -23,7 +24,8 @@ from typing import Any
 # arcticdb MUST be imported before pandas/pyarrow (phase-0 AWS-SDK load-order hazard).
 import arcticdb  # noqa: F401
 import pandas as pd
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import Depends, FastAPI, Header, HTTPException, Query
+from fastapi.middleware.cors import CORSMiddleware
 
 from energex.core import storage, symbology
 from energex.core.config import get_settings
@@ -102,6 +104,16 @@ def _get_library(ac: Any, library: str) -> Any:
     return ac[library]
 
 
+def _require_api_key(x_api_key: str | None = Header(default=None)) -> None:
+    """Optional API-key gate. When ``ENERGEX_READ_API_KEY`` is set, every data endpoint requires
+    a matching ``X-API-Key`` header (constant-time compared); unset leaves the API open (a startup
+    warning is logged). This lets an operator lock down the host-published read API without
+    breaking same-host callers that have the key."""
+    expected = os.environ.get("ENERGEX_READ_API_KEY")
+    if expected and not (x_api_key and hmac.compare_digest(x_api_key, expected)):
+        raise HTTPException(status_code=401, detail="missing or invalid API key")
+
+
 def create_app() -> FastAPI:
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
@@ -124,6 +136,20 @@ def create_app() -> FastAPI:
 
     app = FastAPI(title="energex S2 read API", lifespan=lifespan)
 
+    # CORS is opt-in and origin-scoped: ENERGEX_CORS_ORIGINS is a comma-separated allow-list
+    # (e.g. the frontend origin). Unset = no cross-origin access (the safe default).
+    origins = [
+        o.strip() for o in os.environ.get("ENERGEX_CORS_ORIGINS", "").split(",") if o.strip()
+    ]
+    if origins:
+        app.add_middleware(
+            CORSMiddleware, allow_origins=origins, allow_methods=["GET"], allow_headers=["*"]
+        )
+    if not os.environ.get("ENERGEX_READ_API_KEY"):
+        logger.warning(
+            "read API is UNAUTHENTICATED — set ENERGEX_READ_API_KEY to require an X-API-Key header"
+        )
+
     @app.get("/healthz")
     def healthz() -> dict[str, Any]:
         ac = app.state.arctic
@@ -134,16 +160,16 @@ def create_app() -> FastAPI:
             latest = None
         return {"status": "ok", "libraries": libraries, "latest_as_of": latest}
 
-    @app.get("/libraries")
+    @app.get("/libraries", dependencies=[Depends(_require_api_key)])
     def libraries() -> list[str]:
         return list(app.state.arctic.list_libraries())
 
-    @app.get("/symbols")
+    @app.get("/symbols", dependencies=[Depends(_require_api_key)])
     def symbols(library: str = Query(...)) -> list[str]:
         lib = _get_library(app.state.arctic, library)
         return [s for s in lib.list_symbols() if not s.endswith(VINTAGE_SUFFIX)]
 
-    @app.get("/series")
+    @app.get("/series", dependencies=[Depends(_require_api_key)])
     def series(
         library: str = Query(...),
         symbol: str = Query(...),
@@ -164,14 +190,27 @@ def create_app() -> FastAPI:
         except SymbologyError:
             mode = None  # unknown library -> fall back to symbol-based routing
         df = storage.read_as_of(lib, symbol, as_of=when, date_range=date_range, mode=mode)
+        # Cap an unbounded full-history read so a single request cannot serialize an arbitrarily
+        # large series into one response; intentional bounded reads (start/end) are exempt.
+        max_rows = int(os.environ.get("ENERGEX_SERIES_MAX_ROWS", "500000"))
+        if date_range is None and df is not None and len(df) > max_rows:
+            raise HTTPException(
+                status_code=413,
+                detail=f"series has {len(df)} rows (> {max_rows}); narrow with start/end",
+            )
         return _records(df)
 
-    @app.get("/curve")
+    @app.get("/curve", dependencies=[Depends(_require_api_key)])
     def curve(
         commodity: str = Query(...), as_of: str | None = Query(default=None)
     ) -> list[dict[str, Any]]:
         when = _parse_dt(as_of, "as_of")
-        df = storage.read_curve(commodity, when)
+        try:
+            df = storage.read_curve(commodity, when)
+        except SymbologyError as exc:
+            raise HTTPException(
+                status_code=404, detail=f"unknown commodity: {commodity!r}"
+            ) from exc
         return _records(df)
 
     return app

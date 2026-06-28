@@ -139,3 +139,28 @@ def test_series_bad_as_of_400(client):
 def test_curve(client):
     rows = client.get("/curve", params={"commodity": "crude", "as_of": A2.isoformat()}).json()
     assert {row["instrument_id"] for row in rows} == {"CME.CL.CLF26", "CME.CL.CLG26"}
+
+
+def test_curve_unknown_commodity_404(client):
+    # An unknown commodity must be a clean 4xx, not a 500 from an uncaught SymbologyError.
+    assert client.get("/curve", params={"commodity": "nope"}).status_code == 404
+
+
+def test_series_row_cap_413(client, monkeypatch):
+    monkeypatch.setenv("ENERGEX_SERIES_MAX_ROWS", "1")  # force the cap (fixture has 3 rows)
+    full = client.get("/series", params={"library": "prices.futures", "symbol": "CL_CLF26"})
+    assert full.status_code == 413
+    # an intentionally bounded read (start/end) is exempt from the cap
+    bounded = client.get(
+        "/series",
+        params={"library": "prices.futures", "symbol": "CL_CLF26", "start": D1.isoformat()},
+    )
+    assert bounded.status_code == 200
+
+
+def test_api_key_required_when_configured(client, monkeypatch):
+    monkeypatch.setenv("ENERGEX_READ_API_KEY", "s3cret")
+    assert client.get("/libraries").status_code == 401  # missing key
+    assert client.get("/libraries", headers={"X-API-Key": "wrong"}).status_code == 401
+    assert client.get("/libraries", headers={"X-API-Key": "s3cret"}).status_code == 200
+    assert client.get("/healthz").status_code == 200  # healthz stays open for healthchecks
