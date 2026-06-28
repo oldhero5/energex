@@ -81,6 +81,16 @@ def _empty_spp() -> pd.DataFrame:
     )
 
 
+def _empty_load() -> pd.DataFrame:
+    return pd.DataFrame(
+        {
+            "instrument_id": pd.Series(dtype="object"),
+            "valid_time": pd.Series(dtype="datetime64[ns, UTC]"),
+            "value": pd.Series(dtype="float64"),
+        }
+    )
+
+
 def _finalize_spp(prefix: str, raw: pd.DataFrame, valid_time: pd.Series) -> pd.DataFrame:
     cols = ["instrument_id", "valid_time", "settlement_point", "price"]
     sp = raw["settlementPoint"].astype(str)
@@ -260,6 +270,31 @@ class ErcotDamSppConnector(_ErcotConnector):
         minutes = _hour_ending_to_minutes(raw["hourEnding"])
         valid_time = _cpt_hour_ending_to_utc(raw["deliveryDate"], minutes, raw["DSTFlag"])
         return _finalize_spp("ERCOT.DASPP.", raw, valid_time)
+
+
+class ErcotLoadConnector(_ErcotConnector):
+    """ERCOT-wide actual system load (the `total` weather-zone column) -> ERCOT.LOAD.ERCOT."""
+
+    report_path = "np6-345-cd/act_sys_load_by_wzn"
+
+    def _date_params(self, start: date, end: date) -> dict[str, Any]:
+        return {"operatingDayFrom": start.isoformat(), "operatingDayTo": end.isoformat()}
+
+    def _shape(self, raw: pd.DataFrame) -> pd.DataFrame:
+        cols = ["instrument_id", "valid_time", "value"]
+        if raw.empty:
+            return _empty_load()
+        minutes = _hour_ending_to_minutes(raw["hourEnding"])
+        out = pd.DataFrame(
+            {
+                "instrument_id": "ERCOT.LOAD.ERCOT",
+                "valid_time": _cpt_hour_ending_to_utc(raw["operatingDay"], minutes, raw["DSTFlag"]),
+                "value": pd.to_numeric(raw["total"], errors="coerce").astype("float64"),
+            }
+        )
+        out = out.dropna(subset=["value"])
+        out = out.drop_duplicates(subset=["instrument_id", "valid_time"], keep="last")
+        return out.sort_values("valid_time").reset_index(drop=True)[cols]
 
 
 # Backward-compat alias; removed in the orchestration task once assets import the new name.

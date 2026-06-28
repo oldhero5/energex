@@ -138,3 +138,28 @@ def test_dam_spp_shapes_and_filters():
     assert len(result.frame) == 2
     assert respx.calls.call_count == 2  # token + single (no per-type) page
     quality.validate(result.frame, schemas.ERCOT_SPP, as_of=result.fetched_at)
+
+
+LOAD_URL = f"{BASE}/np6-345-cd/act_sys_load_by_wzn"
+_LOAD_FIELDS = [
+    "operatingDay", "hourEnding", "coast", "east", "farWest", "north",
+    "northC", "southern", "southC", "west", "total", "DSTFlag",
+]
+
+
+@respx.mock
+def test_load_shapes_total_only():
+    from energex.core.connectors.ercot import ErcotLoadConnector
+
+    respx.post(TOKEN_URL).mock(return_value=httpx.Response(200, json=_TOKEN))
+    page = _envelope(_LOAD_FIELDS, [
+        [_TODAY, "01:00", 15796.82, 2014.35, 7595.58, 1879.89, 17819.16, 5016.6, 9775.83, 1900.13, 61798.36, False],
+        [_TODAY, "02:00", 15159.63, 1918.33, 7656.68, 1763.04, 16733.24, 4778.72, 9164.31, 1828.51, 59002.46, False],
+    ])
+    route = respx.get(LOAD_URL).mock(return_value=httpx.Response(200, json=page))
+    result = ErcotLoadConnector(**_kwargs()).fetch(date.today(), date.today())
+    assert set(result.frame["instrument_id"]) == {"ERCOT.LOAD.ERCOT"}
+    assert result.frame["value"].tolist() == [61798.36, 59002.46]
+    # Uses operatingDay* date params (not deliveryDate*).
+    assert "operatingDayFrom" in route.calls.last.request.url.params
+    quality.validate(result.frame, schemas.ERCOT_LOAD, as_of=result.fetched_at)
