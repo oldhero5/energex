@@ -69,3 +69,18 @@ def test_mode_for_library_routes_power_by_library():
 def test_mode_for_library_unknown_raises():
     with pytest.raises(SymbologyError):
         symbology.mode_for_library("power.nope")
+
+
+def test_ercot_power_routing():
+    assert symbology.resolve("ERCOT.SPP.HB_HOUSTON") == ("power.lmp", "hb_houston")
+    assert symbology.resolve("ERCOT.DASPP.HB_NORTH") == ("power.dalmp", "hb_north")
+    assert symbology.resolve("ERCOT.LOAD.ERCOT") == ("power.load", "ercot")
+    assert symbology.revision_mode("ERCOT.DASPP.HB_NORTH") == "bitemporal_merge"
+    assert symbology.mode_for_library("power.dalmp") == "bitemporal_merge"
+
+
+def test_ercot_fuelmix_route_removed():
+    with pytest.raises(SymbologyError):
+        symbology.resolve("ERCOT.FUELMIX.ERCOT")
+    with pytest.raises(SymbologyError):
+        symbology.mode_for_library("power.fuelmix")
