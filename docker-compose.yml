@@ -22,8 +22,8 @@ services:
       MINIO_ENDPOINT: minio:9000
       ARCTIC_BUCKET: ${ARCTIC_BUCKET:-arctic}
       # Scoped ArcticDB service account created by minio-init (NOT MinIO root); read-only API.
-      MINIO_ACCESS_KEY: ${ARCTIC_ACCESS_KEY:-energex-arctic}
-      MINIO_SECRET_KEY: ${ARCTIC_SECRET_KEY:-energex-arctic-secret}
+      MINIO_ACCESS_KEY: ${ARCTIC_ACCESS_KEY:?set ARCTIC_ACCESS_KEY in .env}
+      MINIO_SECRET_KEY: ${ARCTIC_SECRET_KEY:?set ARCTIC_SECRET_KEY in .env}
       TZ: UTC
     ports:
       - "8000:8001"
@@ -79,8 +79,8 @@ services:
     mem_limit: 1g
     cpus: 1.0
     environment:
-      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
-      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin}
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:?set MINIO_ROOT_USER in .env}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?set MINIO_ROOT_PASSWORD in .env}
     ports:
       - "9000:9000"
       - "9001:9001"
@@ -110,10 +110,10 @@ services:
       minio:
         condition: service_healthy
     environment:
-      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
-      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin}
-      ARCTIC_ACCESS_KEY: ${ARCTIC_ACCESS_KEY:-energex-arctic}
-      ARCTIC_SECRET_KEY: ${ARCTIC_SECRET_KEY:-energex-arctic-secret}
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:?set MINIO_ROOT_USER in .env}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?set MINIO_ROOT_PASSWORD in .env}
+      ARCTIC_ACCESS_KEY: ${ARCTIC_ACCESS_KEY:?set ARCTIC_ACCESS_KEY in .env}
+      ARCTIC_SECRET_KEY: ${ARCTIC_SECRET_KEY:?set ARCTIC_SECRET_KEY in .env}
     volumes:
       - ./deploy/minio:/policies:ro
     entrypoint: >
@@ -182,8 +182,8 @@ services:
       MINIO_ENDPOINT: minio:9000
       ARCTIC_BUCKET: ${ARCTIC_BUCKET:-arctic}
       # Scoped ArcticDB service account created by minio-init (NOT MinIO root).
-      MINIO_ACCESS_KEY: ${ARCTIC_ACCESS_KEY:-energex-arctic}
-      MINIO_SECRET_KEY: ${ARCTIC_SECRET_KEY:-energex-arctic-secret}
+      MINIO_ACCESS_KEY: ${ARCTIC_ACCESS_KEY:?set ARCTIC_ACCESS_KEY in .env}
+      MINIO_SECRET_KEY: ${ARCTIC_SECRET_KEY:?set ARCTIC_SECRET_KEY in .env}
       # Entity graph (Neo4jResource forward-compat).
       NEO4J_URI: bolt://neo4j:7687
       NEO4J_USER: neo4j
@@ -240,8 +240,8 @@ services:
       MINIO_ENDPOINT: minio:9000
       ARCTIC_BUCKET: ${ARCTIC_BUCKET:-arctic}
       # Scoped ArcticDB service account created by minio-init (NOT MinIO root).
-      MINIO_ACCESS_KEY: ${ARCTIC_ACCESS_KEY:-energex-arctic}
-      MINIO_SECRET_KEY: ${ARCTIC_SECRET_KEY:-energex-arctic-secret}
+      MINIO_ACCESS_KEY: ${ARCTIC_ACCESS_KEY:?set ARCTIC_ACCESS_KEY in .env}
+      MINIO_SECRET_KEY: ${ARCTIC_SECRET_KEY:?set ARCTIC_SECRET_KEY in .env}
       # Entity graph (Neo4jResource forward-compat).
       NEO4J_URI: bolt://neo4j:7687
       NEO4J_USER: neo4j
@@ -277,7 +277,7 @@ services:
     mem_limit: 2g
     cpus: 1.5
     environment:
-      NEO4J_AUTH: ${NEO4J_AUTH:-neo4j/energex-neo4j}
+      NEO4J_AUTH: ${NEO4J_AUTH:?set NEO4J_AUTH in .env}
       NEO4J_server_memory_heap_initial__size: "512m"
       NEO4J_server_memory_heap_max__size: "512m"
       NEO4J_server_memory_pagecache_size: "512m"

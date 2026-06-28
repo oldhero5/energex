@@ -34,7 +34,7 @@ The `full` profile starts:
 | `minio` | 9000 / 9001 | ArcticDB object store + web console |
 | `minio-init` | — | One-shot: creates the bucket and scoped service account |
 | `neo4j` | 7474 / 7687 | Optional entity graph |
-| `energex` | 8000 | Legacy FastAPI service |
+| `api` | 8000 | S2 read API (`/series`, `/curve`, `/symbols`, `/libraries`) |
 
 Then open:
 
