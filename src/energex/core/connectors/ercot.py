@@ -44,15 +44,24 @@ _SPP_TYPES = ("HU", "LZ")
 # Canonical tradeable settlement points (hubs + load zones); resource nodes are dropped.
 _SETTLEMENT_POINTS = frozenset(
     {
-        "HB_HOUSTON", "HB_NORTH", "HB_PAN", "HB_SOUTH", "HB_WEST",
-        "LZ_AEN", "LZ_CPS", "LZ_HOUSTON", "LZ_LCRA", "LZ_NORTH", "LZ_RAYBN", "LZ_SOUTH", "LZ_WEST",
+        "HB_HOUSTON",
+        "HB_NORTH",
+        "HB_PAN",
+        "HB_SOUTH",
+        "HB_WEST",
+        "LZ_AEN",
+        "LZ_CPS",
+        "LZ_HOUSTON",
+        "LZ_LCRA",
+        "LZ_NORTH",
+        "LZ_RAYBN",
+        "LZ_SOUTH",
+        "LZ_WEST",
     }
 )
 
 
-def _cpt_hour_ending_to_utc(
-    days: pd.Series, minutes: pd.Series, dst_flag: pd.Series
-) -> pd.Series:
+def _cpt_hour_ending_to_utc(days: pd.Series, minutes: pd.Series, dst_flag: pd.Series) -> pd.Series:
     """(operating day, minutes-after-midnight hour-ending, DSTFlag) -> tz-aware UTC.
 
     ``days`` is date-like; ``minutes`` is minutes after local midnight of the interval-/
@@ -254,7 +263,9 @@ class ErcotRtSppConnector(_ErcotConnector):
     def _shape(self, raw: pd.DataFrame) -> pd.DataFrame:
         if raw.empty:
             return _empty_spp()
-        minutes = (raw["deliveryHour"].astype(int) - 1) * 60 + raw["deliveryInterval"].astype(int) * 15
+        minutes = (raw["deliveryHour"].astype(int) - 1) * 60 + raw["deliveryInterval"].astype(
+            int
+        ) * 15
         valid_time = _cpt_hour_ending_to_utc(raw["deliveryDate"], minutes, raw["DSTFlag"])
         return _finalize_spp("ERCOT.SPP.", raw, valid_time)
 

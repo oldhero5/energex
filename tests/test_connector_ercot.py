@@ -27,8 +27,13 @@ RT_URL = f"{BASE}/np6-905-cd/spp_node_zone_hub"
 _TOKEN = {"id_token": "idtok", "access_token": "acctok", "token_type": "Bearer", "expires_in": 3600}
 _TODAY = date.today().isoformat()
 _RT_FIELDS = [
-    "deliveryDate", "deliveryHour", "deliveryInterval", "settlementPoint",
-    "settlementPointType", "settlementPointPrice", "DSTFlag",
+    "deliveryDate",
+    "deliveryHour",
+    "deliveryInterval",
+    "settlementPoint",
+    "settlementPointType",
+    "settlementPointPrice",
+    "DSTFlag",
 ]
 
 
@@ -37,8 +42,10 @@ def _envelope(fields, rows, *, total_pages=1, current_page=1):
         "data": rows,
         "fields": [{"name": n, "dataType": "VARCHAR"} for n in fields],
         "_meta": {
-            "totalRecords": len(rows), "pageSize": 100000,
-            "totalPages": total_pages, "currentPage": current_page,
+            "totalRecords": len(rows),
+            "pageSize": 100000,
+            "totalPages": total_pages,
+            "currentPage": current_page,
         },
     }
 
@@ -56,10 +63,13 @@ def _kwargs():
 @respx.mock
 def test_rt_spp_mints_id_token_and_shapes():
     respx.post(TOKEN_URL).mock(return_value=httpx.Response(200, json=_TOKEN))
-    hu = _envelope(_RT_FIELDS, [
-        [_TODAY, 1, 1, "HB_HOUSTON", "HU", 30.31, False],
-        [_TODAY, 1, 2, "HB_HOUSTON", "HU", 31.00, False],
-    ])
+    hu = _envelope(
+        _RT_FIELDS,
+        [
+            [_TODAY, 1, 1, "HB_HOUSTON", "HU", 30.31, False],
+            [_TODAY, 1, 2, "HB_HOUSTON", "HU", 31.00, False],
+        ],
+    )
     lz = _envelope(_RT_FIELDS, [[_TODAY, 1, 1, "LZ_NORTH", "LZ", 29.50, False]])
     respx.get(RT_URL).mock(side_effect=[httpx.Response(200, json=hu), httpx.Response(200, json=lz)])
 
@@ -79,14 +89,20 @@ def test_rt_spp_mints_id_token_and_shapes():
 @respx.mock
 def test_rt_spp_paginates_all_pages():
     respx.post(TOKEN_URL).mock(return_value=httpx.Response(200, json=_TOKEN))
-    hu1 = _envelope(_RT_FIELDS, [[_TODAY, 1, 1, "HB_HOUSTON", "HU", 30.0, False]],
-                    total_pages=2, current_page=1)
-    hu2 = _envelope(_RT_FIELDS, [[_TODAY, 2, 1, "HB_NORTH", "HU", 31.0, False]],
-                    total_pages=2, current_page=2)
+    hu1 = _envelope(
+        _RT_FIELDS, [[_TODAY, 1, 1, "HB_HOUSTON", "HU", 30.0, False]], total_pages=2, current_page=1
+    )
+    hu2 = _envelope(
+        _RT_FIELDS, [[_TODAY, 2, 1, "HB_NORTH", "HU", 31.0, False]], total_pages=2, current_page=2
+    )
     lz1 = _envelope(_RT_FIELDS, [[_TODAY, 1, 1, "LZ_WEST", "LZ", 28.0, False]])
-    respx.get(RT_URL).mock(side_effect=[
-        httpx.Response(200, json=hu1), httpx.Response(200, json=hu2), httpx.Response(200, json=lz1),
-    ])
+    respx.get(RT_URL).mock(
+        side_effect=[
+            httpx.Response(200, json=hu1),
+            httpx.Response(200, json=hu2),
+            httpx.Response(200, json=lz1),
+        ]
+    )
     result = ErcotRtSppConnector(**_kwargs()).fetch(date.today(), date.today())
     assert set(result.frame["settlement_point"]) == {"HB_HOUSTON", "HB_NORTH", "LZ_WEST"}
     assert respx.calls.call_count == 4  # token + HU(2 pages) + LZ(1 page)
@@ -95,10 +111,13 @@ def test_rt_spp_paginates_all_pages():
 @respx.mock
 def test_rt_spp_drops_non_hub_loadzone_points():
     respx.post(TOKEN_URL).mock(return_value=httpx.Response(200, json=_TOKEN))
-    page = _envelope(_RT_FIELDS, [
-        [_TODAY, 1, 1, "HB_SOUTH", "HU", 30.0, False],
-        [_TODAY, 1, 1, "XYZ_RESOURCE_RN", "RN", 45.0, False],
-    ])
+    page = _envelope(
+        _RT_FIELDS,
+        [
+            [_TODAY, 1, 1, "HB_SOUTH", "HU", 30.0, False],
+            [_TODAY, 1, 1, "XYZ_RESOURCE_RN", "RN", 45.0, False],
+        ],
+    )
     respx.get(RT_URL).mock(return_value=httpx.Response(200, json=page))
     result = ErcotRtSppConnector(**_kwargs()).fetch(date.today(), date.today())
     assert set(result.frame["settlement_point"]) == {"HB_SOUTH"}
@@ -115,7 +134,12 @@ def test_cpt_hour_ending_to_utc_summer_and_winter():
 
 
 def test_rt_spp_fails_fast_without_creds(monkeypatch):
-    for var in ("ERCOT_USERNAME", "ERCOT_PASSWORD", "ERCOT_API_KEY_PRIMARY", "ERCOT_SUBSCRIPTION_KEY"):
+    for var in (
+        "ERCOT_USERNAME",
+        "ERCOT_PASSWORD",
+        "ERCOT_API_KEY_PRIMARY",
+        "ERCOT_SUBSCRIPTION_KEY",
+    ):
         monkeypatch.delenv(var, raising=False)
     with pytest.raises(ConfigurationError, match="ERCOT"):
         ErcotRtSppConnector().fetch(date.today(), date.today())
@@ -130,11 +154,14 @@ def test_dam_spp_shapes_and_filters():
     from energex.core.connectors.ercot import ErcotDamSppConnector
 
     respx.post(TOKEN_URL).mock(return_value=httpx.Response(200, json=_TOKEN))
-    page = _envelope(_DAM_FIELDS, [
-        [_TODAY, "01:00", "HB_HOUSTON", 27.47, False],
-        [_TODAY, "02:00", "HB_HOUSTON", 26.00, False],
-        [_TODAY, "01:00", "XYZ_RESOURCE_RN", 30.00, False],  # dropped (not hub/LZ)
-    ])
+    page = _envelope(
+        _DAM_FIELDS,
+        [
+            [_TODAY, "01:00", "HB_HOUSTON", 27.47, False],
+            [_TODAY, "02:00", "HB_HOUSTON", 26.00, False],
+            [_TODAY, "01:00", "XYZ_RESOURCE_RN", 30.00, False],  # dropped (not hub/LZ)
+        ],
+    )
     respx.get(DAM_URL).mock(return_value=httpx.Response(200, json=page))
     result = ErcotDamSppConnector(**_kwargs()).fetch(date.today(), date.today())
     assert set(result.frame["instrument_id"]) == {"ERCOT.DASPP.HB_HOUSTON"}
@@ -145,8 +172,18 @@ def test_dam_spp_shapes_and_filters():
 
 LOAD_URL = f"{BASE}/np6-345-cd/act_sys_load_by_wzn"
 _LOAD_FIELDS = [
-    "operatingDay", "hourEnding", "coast", "east", "farWest", "north",
-    "northC", "southern", "southC", "west", "total", "DSTFlag",
+    "operatingDay",
+    "hourEnding",
+    "coast",
+    "east",
+    "farWest",
+    "north",
+    "northC",
+    "southern",
+    "southC",
+    "west",
+    "total",
+    "DSTFlag",
 ]
 
 
@@ -155,10 +192,39 @@ def test_load_shapes_total_only():
     from energex.core.connectors.ercot import ErcotLoadConnector
 
     respx.post(TOKEN_URL).mock(return_value=httpx.Response(200, json=_TOKEN))
-    page = _envelope(_LOAD_FIELDS, [
-        [_TODAY, "01:00", 15796.82, 2014.35, 7595.58, 1879.89, 17819.16, 5016.6, 9775.83, 1900.13, 61798.36, False],
-        [_TODAY, "02:00", 15159.63, 1918.33, 7656.68, 1763.04, 16733.24, 4778.72, 9164.31, 1828.51, 59002.46, False],
-    ])
+    page = _envelope(
+        _LOAD_FIELDS,
+        [
+            [
+                _TODAY,
+                "01:00",
+                15796.82,
+                2014.35,
+                7595.58,
+                1879.89,
+                17819.16,
+                5016.6,
+                9775.83,
+                1900.13,
+                61798.36,
+                False,
+            ],
+            [
+                _TODAY,
+                "02:00",
+                15159.63,
+                1918.33,
+                7656.68,
+                1763.04,
+                16733.24,
+                4778.72,
+                9164.31,
+                1828.51,
+                59002.46,
+                False,
+            ],
+        ],
+    )
     route = respx.get(LOAD_URL).mock(return_value=httpx.Response(200, json=page))
     result = ErcotLoadConnector(**_kwargs()).fetch(date.today(), date.today())
     assert set(result.frame["instrument_id"]) == {"ERCOT.LOAD.ERCOT"}

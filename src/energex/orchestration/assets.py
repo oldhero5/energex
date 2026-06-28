@@ -463,9 +463,7 @@ def ercot_dam_spp(
     partitions_def=ERCOT_DAILY,
     description="ERCOT-wide actual system load (hourly) -> power.load (bitemporal_merge).",
 )
-def ercot_load(
-    context: dg.AssetExecutionContext, arctic: ArcticDBResource
-) -> dg.MaterializeResult:
+def ercot_load(context: dg.AssetExecutionContext, arctic: ArcticDBResource) -> dg.MaterializeResult:
     day = context.partition_time_window.start.date()
     result = ErcotLoadConnector().fetch(day, day)
     return _commit_ercot(context, arctic, result, schemas.ERCOT_LOAD)
