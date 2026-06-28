@@ -44,3 +44,18 @@ def test_config_old_and_new_paths_are_identical():
     from energex.core.config import get_settings as new
 
     assert old is new
+
+
+def test_ercot_subscription_key_reads_primary(monkeypatch):
+    monkeypatch.setenv("ERCOT_API_KEY_PRIMARY", "primary-xyz")
+    monkeypatch.setenv("ERCOT_API_KEY_SECONDARY", "secondary-xyz")
+    cfg = ConnectorConfig()
+    assert cfg.ercot_subscription_key.get_secret_value() == "primary-xyz"
+    assert cfg.ercot_subscription_key_secondary.get_secret_value() == "secondary-xyz"
+
+
+def test_ercot_subscription_key_falls_back_to_legacy_name(monkeypatch):
+    monkeypatch.delenv("ERCOT_API_KEY_PRIMARY", raising=False)
+    monkeypatch.setenv("ERCOT_SUBSCRIPTION_KEY", "legacy-key")
+    cfg = ConnectorConfig()
+    assert cfg.ercot_subscription_key.get_secret_value() == "legacy-key"
