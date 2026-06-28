@@ -12,9 +12,10 @@ Usage:
     python src/examples/02_volatility_analysis.py
 """
 
-import polars as pl
 import plotly.graph_objects as go
+import polars as pl
 from plotly.subplots import make_subplots
+
 from energex import EnergyDatabase, VolatilityAnalyzer
 
 print("=" * 70)

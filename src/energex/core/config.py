@@ -3,7 +3,7 @@
 from pathlib import Path
 from typing import Literal
 
-from pydantic import Field, SecretStr, field_validator
+from pydantic import AliasChoices, Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from energex.core.exceptions import ConfigurationError
@@ -143,7 +143,11 @@ class ConnectorConfig(BaseSettings):
     ercot_username: str | None = Field(default=None, validation_alias="ERCOT_USERNAME")
     ercot_password: SecretStr | None = Field(default=None, validation_alias="ERCOT_PASSWORD")
     ercot_subscription_key: SecretStr | None = Field(
-        default=None, validation_alias="ERCOT_SUBSCRIPTION_KEY"
+        default=None,
+        validation_alias=AliasChoices("ERCOT_API_KEY_PRIMARY", "ERCOT_SUBSCRIPTION_KEY"),
+    )
+    ercot_subscription_key_secondary: SecretStr | None = Field(
+        default=None, validation_alias="ERCOT_API_KEY_SECONDARY"
     )
     noaa_token: SecretStr | None = Field(default=None, validation_alias="NOAA_TOKEN")
 

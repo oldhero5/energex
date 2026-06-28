@@ -12,9 +12,10 @@ Usage:
     python src/examples/01_data_quality_analysis.py
 """
 
-import polars as pl
 import plotly.express as px
-from energex import EnergyDatabase, DataQualityChecker
+import polars as pl
+
+from energex import DataQualityChecker, EnergyDatabase
 
 print("=" * 70)
 print("ENERGEX - Data Quality Analysis Example")

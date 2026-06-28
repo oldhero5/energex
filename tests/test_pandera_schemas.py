@@ -334,23 +334,3 @@ def test_ercot_spp_schema_passes():
         }
     )
     assert len(quality.validate(frame, schemas.ERCOT_SPP, as_of=as_of)) == 2
-
-
-def test_ercot_fuelmix_uniqueness_includes_fuel_type():
-    import pandas as pd
-    import pytest
-
-    from energex.core import quality, schemas
-    from energex.core.exceptions import QualityGateError
-
-    as_of = pd.Timestamp("2026-06-19T12:00:00Z").to_pydatetime()
-    dup = pd.DataFrame(
-        {
-            "instrument_id": ["ERCOT.FUELMIX.ERCOT", "ERCOT.FUELMIX.ERCOT"],
-            "valid_time": pd.to_datetime(["2026-06-19T10:00Z", "2026-06-19T10:00Z"], utc=True),
-            "fuel_type": ["GAS", "GAS"],
-            "value": [30000.0, 30000.0],
-        }
-    )
-    with pytest.raises(QualityGateError):
-        quality.validate(dup, schemas.ERCOT_FUELMIX, as_of=as_of)

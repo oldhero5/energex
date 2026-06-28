@@ -14,9 +14,10 @@ Usage:
     python src/examples/00_setup_data_historical.py
 """
 
+
 import polars as pl
 import yfinance as yf
-from datetime import datetime, timedelta
+
 from energex import EnergyDatabase
 
 print("=" * 70)

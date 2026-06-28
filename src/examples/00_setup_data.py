@@ -9,6 +9,7 @@ This will populate the database with recent market data.
 """
 
 import polars as pl
+
 from energex import EnergyDatabase, EnergyDataFetcher
 
 print("=" * 70)

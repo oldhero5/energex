@@ -214,19 +214,6 @@ ERCOT_LOAD = DataFrameSchema(
     coerce=True,
 )
 
-ERCOT_FUELMIX = DataFrameSchema(
-    name="ERCOT_FUELMIX",
-    columns={
-        "instrument_id": _id_col(),
-        "valid_time": _valid_time_col(),
-        "fuel_type": Column(str, nullable=False),
-        "value": Column(float, Check.in_range(-10_000.0, 200_000.0), nullable=True, coerce=True),
-    },
-    checks=[_unique_keys_check_with(("fuel_type",)), _row_floor_check(), _freshness_check(2)],
-    strict=False,
-    coerce=True,
-)
-
 # EIA-930 hourly grid monitor. value: MWh (demand/generation) or net MWh (interchange,
 # signed); EIA publishes gaps as null. Hourly data finalizes within ~1 day -> 2-bday bound.
 _POWER_BAND = Check.in_range(-10_000_000.0, 10_000_000.0)

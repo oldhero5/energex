@@ -114,7 +114,7 @@ ignore = ["E501"]
 
 [tool.ruff.lint.per-file-ignores]
 "__init__.py" = ["F401"]
-"**/examples/*.py" = ["T201", "C408"]  # Allow print() and dict() in examples
+"src/examples/**" = ["T201", "C408"]  # Allow print() and dict() in demo scripts/notebooks
 "**/test_*.py" = ["T201"]  # Allow print() in test files
 
 [tool.black]

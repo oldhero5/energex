@@ -17,7 +17,9 @@ from energex.orchestration.assets import (
     eia930_region,
     eia_gas_storage,
     eia_petroleum_status,
-    ercot_spp,
+    ercot_dam_spp,
+    ercot_load,
+    ercot_rt_spp,
     fred_spot_prices,
     noaa_degree_days,
 )
@@ -129,18 +131,54 @@ def eia930_schedule(
     return _latest_partition_request(context, EIA930_DAILY)
 
 
-_ercot_spp_job = dg.define_asset_job("ercot_spp_job", selection=dg.AssetSelection.assets(ercot_spp))
-
-
-# Dormant until ERCOT creds land: STOPPED by default so ticks do not fire failing runs.
-@dg.schedule(
-    job=_ercot_spp_job,
-    cron_schedule="15 * * * *",
-    execution_timezone="America/Chicago",
-    name="ercot_spp_schedule",
-    default_status=dg.DefaultScheduleStatus.STOPPED,
+_ercot_rt_spp_job = dg.define_asset_job(
+    "ercot_rt_spp_job", selection=dg.AssetSelection.assets(ercot_rt_spp)
 )
-def ercot_spp_schedule(
+_ercot_dam_spp_job = dg.define_asset_job(
+    "ercot_dam_spp_job", selection=dg.AssetSelection.assets(ercot_dam_spp)
+)
+_ercot_load_job = dg.define_asset_job(
+    "ercot_load_job", selection=dg.AssetSelection.assets(ercot_load)
+)
+
+
+# RT SPP lands every 15 min; re-materialize the latest partition hourly.
+@dg.schedule(
+    job=_ercot_rt_spp_job,
+    cron_schedule="25 * * * *",
+    execution_timezone="America/Chicago",
+    name="ercot_rt_spp_schedule",
+    default_status=dg.DefaultScheduleStatus.RUNNING,
+)
+def ercot_rt_spp_schedule(
+    context: dg.ScheduleEvaluationContext,
+) -> dg.RunRequest | dg.SkipReason:
+    return _latest_partition_request(context, ERCOT_DAILY)
+
+
+# Actual system load posts hourly.
+@dg.schedule(
+    job=_ercot_load_job,
+    cron_schedule="35 * * * *",
+    execution_timezone="America/Chicago",
+    name="ercot_load_schedule",
+    default_status=dg.DefaultScheduleStatus.RUNNING,
+)
+def ercot_load_schedule(
+    context: dg.ScheduleEvaluationContext,
+) -> dg.RunRequest | dg.SkipReason:
+    return _latest_partition_request(context, ERCOT_DAILY)
+
+
+# DAM clears ~12:30-13:30 CPT for the next day; refresh once each afternoon.
+@dg.schedule(
+    job=_ercot_dam_spp_job,
+    cron_schedule="0 14 * * *",
+    execution_timezone="America/Chicago",
+    name="ercot_dam_spp_schedule",
+    default_status=dg.DefaultScheduleStatus.RUNNING,
+)
+def ercot_dam_spp_schedule(
     context: dg.ScheduleEvaluationContext,
 ) -> dg.RunRequest | dg.SkipReason:
     return _latest_partition_request(context, ERCOT_DAILY)
@@ -152,5 +190,7 @@ SCHEDULES: list[Any] = [
     noaa_degree_days_schedule,
     fred_spot_prices_schedule,
     eia930_schedule,
-    ercot_spp_schedule,
+    ercot_rt_spp_schedule,
+    ercot_load_schedule,
+    ercot_dam_spp_schedule,
 ]

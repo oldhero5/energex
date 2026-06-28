@@ -50,7 +50,7 @@ LIBRARY_MODE: dict[str, str] = {
     "power.generation_by_fuel": "degenerate",
     "power.lmp": "bitemporal_merge",
     "power.load": "bitemporal_merge",
-    "power.fuelmix": "bitemporal_merge",
+    "power.dalmp": "bitemporal_merge",
 }
 
 # Rule-based routing for the high-cardinality power namespace: <PREFIX>.<TAIL> where
@@ -64,7 +64,7 @@ _POWER_PREFIX: dict[str, tuple[str, str]] = {
     "EIA930.GEN_FUEL": ("power.generation_by_fuel", "degenerate"),
     "ERCOT.SPP": ("power.lmp", "bitemporal_merge"),
     "ERCOT.LOAD": ("power.load", "bitemporal_merge"),
-    "ERCOT.FUELMIX": ("power.fuelmix", "bitemporal_merge"),
+    "ERCOT.DASPP": ("power.dalmp", "bitemporal_merge"),
 }
 
 

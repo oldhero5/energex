@@ -9,3 +9,8 @@ paths = [
   '''\.mypy_cache/.*''',
   '''\.ruff_cache/.*''',
 ]
+regexes = [
+  # ERCOT's PUBLIC OAuth client_id for the public-reports ROPC flow — published by ERCOT
+  # and required by every client; not a secret. Trips the generic-api-key entropy rule.
+  '''fec253ea-0d06-4272-a5e6-b478baeecd70''',
+]

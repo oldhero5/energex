@@ -47,6 +47,16 @@ Configuration:
 For more examples, see: src/examples/
 """
 
+# Load the repo-root .env for local runs so nested sub-configs (e.g. ConnectorConfig)
+# that read os.environ-only see credentials. Skipped under pytest to preserve the
+# offline tests' no-creds invariant; deployment injects env via docker-compose.
+import sys
+
+if "pytest" not in sys.modules:
+    from dotenv import load_dotenv
+
+    load_dotenv()
+
 # Pin ArcticDB's vendored AWS C SDK ahead of pyarrow's (phase-0 load-order hazard):
 # whichever of libarrow / arcticdb_ext loads first wins the AWS symbols, and if
 # pyarrow wins, ArcticDB's S3 client constructor aborts the process on macOS. The

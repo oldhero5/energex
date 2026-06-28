@@ -14,11 +14,11 @@ the package layout and summarized below.
 
 Energex is centered on **power markets**. The **EIA-930 Hourly Electric Grid Monitor**
 (demand, day-ahead forecast, net generation, interchange, and generation-by-fuel for all
-US balancing authorities) ingests hourly today. The **ERCOT** nodal connector (RT + DA
-settlement point prices) is built and offline-tested, dormant until its OAuth credentials
-are supplied. Oil & gas and weather remain ingested as supporting context but are no
-longer the focus. Next on the power track: activating ERCOT once creds land, then ERCOT
-system load + fuel mix, and additional ISOs (CAISO, PJM, MISO).
+US balancing authorities) ingests hourly today. **ERCOT** nodal data ingests live from the
+ERCOT public API: real-time and day-ahead settlement point prices for the trading hubs and
+load zones, plus ERCOT-wide actual system load. Oil & gas and weather remain ingested as
+supporting context but are no longer the focus. Next on the power track: additional ISOs
+(CAISO, PJM, MISO).
 
 ## S2 — Serving (read API)
 
