@@ -6,7 +6,7 @@ import type * as Preset from '@docusaurus/preset-classic';
 
 const config: Config = {
   title: 'Energex',
-  tagline: 'A bitemporal energy-market data platform',
+  tagline: 'A bitemporal, point-in-time data platform for power markets',
   favicon: 'img/favicon.ico',
 
   future: {
@@ -14,7 +14,8 @@ const config: Config = {
   },
 
   url: 'https://oldhero5.github.io',
-  baseUrl: '/',
+  // Project Pages site: served at https://oldhero5.github.io/energex/
+  baseUrl: '/energex/',
 
   organizationName: 'oldhero5',
   projectName: 'energex',
