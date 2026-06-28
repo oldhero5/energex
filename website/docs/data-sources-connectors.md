@@ -17,12 +17,18 @@ source and return a normalized `FetchResult`. It knows nothing about storage or 
 | --- | --- | --- | --- | --- |
 | **EIA-930** — hourly demand / day-ahead forecast / net generation / interchange (all BAs) | `Eia930RegionConnector` | `power.demand`, `power.demand_forecast`, `power.generation`, `power.interchange` | Hourly | `degenerate` |
 | **EIA-930** — hourly net generation by fuel type (all BAs) | `Eia930FuelConnector` | `power.generation_by_fuel` | Hourly | `degenerate` |
-| **ERCOT** — RT + DA settlement point prices | `ErcotSppConnector` | `power.lmp` | Hourly *(creds-pending)* | `bitemporal_merge` |
+| **ERCOT** — real-time (15-min) settlement point prices, hubs + load zones | `ErcotRtSppConnector` | `power.lmp` | 15-min (hourly refresh) | `bitemporal_merge` |
+| **ERCOT** — day-ahead-market hourly settlement point prices | `ErcotDamSppConnector` | `power.dalmp` | Daily | `bitemporal_merge` |
+| **ERCOT** — ERCOT-wide actual system load | `ErcotLoadConnector` | `power.load` | Hourly | `bitemporal_merge` |
 
-ERCOT is **built and offline-tested but dormant** until its OAuth credentials
-(`ERCOT_USERNAME` / `ERCOT_PASSWORD` / `ERCOT_SUBSCRIPTION_KEY`) are provided; the
-connector fails fast with a clear message and the schedule ships `STOPPED` so no failing
-runs fire. EIA-930 needs only the existing `EIA_API_KEY`.
+ERCOT authenticates via Azure AD B2C ROPC (`ERCOT_USERNAME` / `ERCOT_PASSWORD` plus an APIM
+subscription key in `ERCOT_API_KEY_PRIMARY`) and serves nodal reports under
+`api.ercot.com/api/public-reports`. The connectors mint an ID token, page through the
+`data` / `fields` / `_meta` envelope, and convert Central Prevailing time to UTC. Only the
+canonical tradeable settlement points (5 trading hubs + 8 load zones) are ingested. Fuel
+mix is **not** on the public-reports API — ERCOT fuel mix is served by EIA-930
+(`EIA930.GEN_FUEL.ERCO`). Absent credentials, the connectors fail fast with a clear message.
+EIA-930 needs only the existing `EIA_API_KEY`.
 
 ## Supporting sources (deprioritized)
 
@@ -51,13 +57,14 @@ is hourly and finalizes within about a day, so the asset writes `degenerate`
 (append-with-dedup, latest-wins) over a short re-pull window. A `~3-year` backfill seeds
 history; an hourly schedule keeps it current.
 
-### ERCOT nodal (creds-pending)
+### ERCOT nodal
 
-ERCOT's public API authenticates via OAuth2 (username/password + subscription key) and
-serves nodal reports. `ErcotSppConnector` covers RT + DA settlement point prices →
-`power.lmp` (one symbol per settlement point). SPPs can be restated, so the asset commits
-`bitemporal_merge`. The connector is fully implemented and unit-tested against recorded
-payloads; it activates the moment the ERCOT credentials are added.
+ERCOT's public API covers real-time (NP6-905-CD, 15-min SCED) and day-ahead (NP4-190-CD,
+hourly) settlement point prices → `power.lmp` / `power.dalmp`, and actual system load
+(NP6-345-CD) → `power.load` (one symbol per settlement point; load uses the single
+`ercot` symbol). Prices and load can be restated, so the assets commit `bitemporal_merge`.
+The connectors are unit-tested offline against the real response envelope and run live once
+the ERCOT credentials are present.
 
 ### EIA fundamentals
 

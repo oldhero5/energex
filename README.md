@@ -6,9 +6,10 @@ A self-hosted, always-on energy-market data platform with a **bitemporal
 Energex is focused on **power markets**. It continuously ingests the EIA-930 Hourly
 Electric Grid Monitor (demand, day-ahead forecast, net generation, interchange, and
 generation-by-fuel for every US balancing authority), with NOAA weather and gas/oil
-fundamentals (EIA, FRED) as supporting context. An ERCOT nodal connector (RT + DA
-settlement point prices) is built and ships dormant until its OAuth credentials are
-supplied. Every batch is validated through a quality gate and committed to a versioned
+fundamentals (EIA, FRED) as supporting context. ERCOT nodal data is ingested live from
+the ERCOT public API: real-time and day-ahead settlement point prices for the trading
+hubs and load zones (`power.lmp` / `power.dalmp`) and ERCOT-wide actual system load
+(`power.load`). Every batch is validated through a quality gate and committed to a versioned
 ArcticDB store on MinIO. The store remembers not just *what* a value was, but *when each
 value became known*, so you can reconstruct exactly what the data looked like at any past
 moment.
@@ -127,7 +128,7 @@ Key variables (see [`.env.example`](.env.example) for the complete annotated lis
 | `MINIO_ROOT_USER`, `MINIO_ROOT_PASSWORD` | MinIO root (compose-only; provisions the scoped account) |
 | `ARCTIC_ACCESS_KEY`, `ARCTIC_SECRET_KEY` | Scoped service account created by `minio-init` |
 | `EIA_API_KEY`, `FRED_API_KEY`, `NOAA_TOKEN` | Source connector credentials |
-| `ERCOT_USERNAME`, `ERCOT_PASSWORD`, `ERCOT_SUBSCRIPTION_KEY` | ERCOT credentials (reserved) |
+| `ERCOT_USERNAME`, `ERCOT_PASSWORD`, `ERCOT_API_KEY_PRIMARY` | ERCOT public-API credentials (B2C username/password + APIM subscription key) |
 | `NEO4J_URI`, `NEO4J_USER`, `NEO4J_PASSWORD` | Entity graph |
 | `DAGSTER_PG_USERNAME`, `DAGSTER_PG_PASSWORD`, `DAGSTER_PG_DB` | Dagster Postgres (compose) |
 | `DEFAULT_LLM_PROVIDER`, `DEFAULT_LLM_MODEL`, `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `OLLAMA_BASE_URL` | LLM provider (reserved, S3) |
