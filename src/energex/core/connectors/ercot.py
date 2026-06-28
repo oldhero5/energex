@@ -21,11 +21,11 @@ from typing import Any
 
 import httpx
 import pandas as pd
-from tenacity import retry, stop_after_attempt, wait_exponential
+from tenacity import retry, retry_if_exception, stop_after_attempt, wait_exponential
 
 from energex.core.config import get_settings
 from energex.core.connectors.base import FetchResult
-from energex.core.exceptions import ConfigurationError
+from energex.core.exceptions import ConfigurationError, DataFetchError
 
 logger = logging.getLogger(__name__)
 
@@ -61,22 +61,47 @@ _SETTLEMENT_POINTS = frozenset(
 )
 
 
-def _cpt_hour_ending_to_utc(days: pd.Series, minutes: pd.Series, dst_flag: pd.Series) -> pd.Series:
-    """(operating day, minutes-after-midnight hour-ending, DSTFlag) -> tz-aware UTC.
+def _is_retryable(exc: BaseException) -> bool:
+    """Retry only transient failures: transport/timeout errors and 5xx responses. Never retry
+    4xx (bad creds, bad request) — retrying those just hammers ERCOT's auth/API and risks
+    lockout without ever succeeding."""
+    if isinstance(exc, httpx.TransportError):  # includes TimeoutException, ConnectError, etc.
+        return True
+    if isinstance(exc, httpx.HTTPStatusError):
+        return exc.response.status_code >= 500
+    return False
 
-    ``days`` is date-like; ``minutes`` is minutes after local midnight of the interval-/
-    hour-ending instant; ``dst_flag`` True marks the DST occurrence of the duplicated
-    fall-back hour. Localize to Central Prevailing Time, then convert to UTC.
+
+def _cpt_hour_ending_to_utc(
+    days: pd.Series, end_minutes: pd.Series, dst_flag: pd.Series, duration_minutes: int
+) -> pd.Series:
+    """(operating day, minutes-after-midnight of the interval END, DSTFlag, interval length)
+    -> tz-aware UTC instant of the interval end.
+
+    ERCOT times are Central Prevailing Time, hour-ending. On the fall-back day the 01:00-02:00
+    hour repeats; ERCOT marks the daylight (CDT) repeat with DSTFlag=Y and the standard (CST)
+    repeat with DSTFlag=N (verified against a real fall-back-day payload). Only the 01:00-01:59
+    *beginning* wall instants are ambiguous to pandas, so we localize the interval BEGINNING
+    (``end_minutes - duration``) with ``ambiguous=DSTFlag`` (pandas ``ambiguous=True`` selects the
+    earlier/DST occurrence, matching DSTFlag=Y), then add the duration in absolute time.
+    Localizing the END instant instead would leave 02:00 unambiguous and silently collapse the
+    two repeated hours onto a single UTC timestamp.
     """
-    naive = pd.to_datetime(days) + pd.to_timedelta(minutes.astype(int), unit="m")
+    end_minutes = pd.to_numeric(end_minutes, errors="coerce")
+    begin = pd.to_datetime(days) + pd.to_timedelta(end_minutes - duration_minutes, unit="m")
     ambiguous = dst_flag.astype(bool).to_numpy()
-    local = naive.dt.tz_localize(_CPT, ambiguous=ambiguous, nonexistent="shift_forward")
-    return local.dt.tz_convert("UTC")
+    local_begin = begin.dt.tz_localize(_CPT, ambiguous=ambiguous, nonexistent="shift_forward")
+    return (local_begin + pd.Timedelta(minutes=duration_minutes)).dt.tz_convert("UTC")
 
 
 def _hour_ending_to_minutes(hour_ending: pd.Series) -> pd.Series:
-    """ERCOT hourEnding string ('01:00'..'24:00') -> minutes after midnight (60..1440)."""
-    return hour_ending.astype(str).str.split(":").str[0].astype(int) * 60
+    """ERCOT hourEnding string ('01:00'..'24:00') -> minutes after midnight (60..1440).
+
+    Coerces unparseable values to NaN (which become NaT valid_time and are rejected loudly by
+    the non-null quality gate) rather than raising on a single malformed row.
+    """
+    hours = pd.to_numeric(hour_ending.astype(str).str.split(":").str[0], errors="coerce")
+    return hours * 60
 
 
 def _empty_spp() -> pd.DataFrame:
@@ -111,6 +136,13 @@ def _finalize_spp(prefix: str, raw: pd.DataFrame, valid_time: pd.Series) -> pd.D
             "price": pd.to_numeric(raw["settlementPointPrice"], errors="coerce").astype("float64"),
         }
     )
+    drift = {p for p in sp.unique() if p.startswith(("HB_", "LZ_"))} - set(_SETTLEMENT_POINTS)
+    if drift:
+        logger.warning(
+            "ERCOT: hub/load-zone settlement points seen but not in the curated allowlist "
+            "(possible drift — review _SETTLEMENT_POINTS): %s",
+            sorted(drift),
+        )
     out = out[out["settlement_point"].isin(_SETTLEMENT_POINTS)]
     out = out.dropna(subset=["price"])
     out = out.drop_duplicates(subset=["instrument_id", "valid_time"], keep="last")
@@ -165,6 +197,7 @@ class _ErcotConnector:
         @retry(
             stop=stop_after_attempt(self._retries),
             wait=wait_exponential(multiplier=1, max=10),
+            retry=retry_if_exception(_is_retryable),
             reraise=True,
         )
         def _go() -> str:
@@ -194,11 +227,23 @@ class _ErcotConnector:
         page = 1
         while True:
             body = self._get(client, url, headers, {**params, "size": _PAGE_SIZE, "page": page})
-            if not fields:
-                fields = [f["name"] for f in body.get("fields", [])]
-            rows.extend(body.get("data", []))
-            total_pages = int(body.get("_meta", {}).get("totalPages", page))
-            if page >= total_pages:
+            batch = body.get("data", [])
+            page_fields = body.get("fields")
+            if page_fields:
+                fields = [f["name"] for f in page_fields]
+            elif batch and not fields:
+                # data rows with no column schema would silently vanish in the DataFrame build.
+                raise DataFetchError(
+                    f"ERCOT {self.report_path}: response carried data rows but no 'fields' schema"
+                )
+            rows.extend(batch)
+            total_pages = body.get("_meta", {}).get("totalPages")
+            if total_pages is not None:
+                if page >= int(total_pages):
+                    break
+            elif len(batch) < _PAGE_SIZE:
+                # No pagination metadata: a short page means the end; a full page means keep going
+                # (stopping here would silently truncate; looping forever is avoided by the floor).
                 break
             page += 1
         return pd.DataFrame(rows, columns=fields) if fields else pd.DataFrame()
@@ -207,6 +252,7 @@ class _ErcotConnector:
         @retry(
             stop=stop_after_attempt(self._retries),
             wait=wait_exponential(multiplier=1, max=10),
+            retry=retry_if_exception(_is_retryable),
             reraise=True,
         )
         def _go() -> dict:
@@ -220,7 +266,13 @@ class _ErcotConnector:
         user, pwd, key = self._creds()  # fail-fast before any network call
         fetched_at = datetime.now(timezone.utc)
         owns_client = self._client is None
-        client = httpx.Client(timeout=self._timeout) if owns_client else self._client
+        # follow_redirects=False so a 30x cannot silently move the credentialed request
+        # (bearer token + subscription key) to an off-host location.
+        client = (
+            httpx.Client(timeout=self._timeout, follow_redirects=False)
+            if owns_client
+            else self._client
+        )
         try:
             token = self._token(client, user, pwd)
             raw = self._collect(client, token, key, window_start, window_end)
@@ -263,10 +315,12 @@ class ErcotRtSppConnector(_ErcotConnector):
     def _shape(self, raw: pd.DataFrame) -> pd.DataFrame:
         if raw.empty:
             return _empty_spp()
-        minutes = (raw["deliveryHour"].astype(int) - 1) * 60 + raw["deliveryInterval"].astype(
-            int
-        ) * 15
-        valid_time = _cpt_hour_ending_to_utc(raw["deliveryDate"], minutes, raw["DSTFlag"])
+        hour = pd.to_numeric(raw["deliveryHour"], errors="coerce")
+        interval = pd.to_numeric(raw["deliveryInterval"], errors="coerce")
+        end_minutes = (
+            hour - 1
+        ) * 60 + interval * 15  # 15-min interval-ending, minutes past midnight
+        valid_time = _cpt_hour_ending_to_utc(raw["deliveryDate"], end_minutes, raw["DSTFlag"], 15)
         return _finalize_spp("ERCOT.SPP.", raw, valid_time)
 
 
@@ -278,8 +332,8 @@ class ErcotDamSppConnector(_ErcotConnector):
     def _shape(self, raw: pd.DataFrame) -> pd.DataFrame:
         if raw.empty:
             return _empty_spp()
-        minutes = _hour_ending_to_minutes(raw["hourEnding"])
-        valid_time = _cpt_hour_ending_to_utc(raw["deliveryDate"], minutes, raw["DSTFlag"])
+        end_minutes = _hour_ending_to_minutes(raw["hourEnding"])
+        valid_time = _cpt_hour_ending_to_utc(raw["deliveryDate"], end_minutes, raw["DSTFlag"], 60)
         return _finalize_spp("ERCOT.DASPP.", raw, valid_time)
 
 
@@ -295,11 +349,13 @@ class ErcotLoadConnector(_ErcotConnector):
         cols = ["instrument_id", "valid_time", "value"]
         if raw.empty:
             return _empty_load()
-        minutes = _hour_ending_to_minutes(raw["hourEnding"])
+        end_minutes = _hour_ending_to_minutes(raw["hourEnding"])
         out = pd.DataFrame(
             {
                 "instrument_id": "ERCOT.LOAD.ERCOT",
-                "valid_time": _cpt_hour_ending_to_utc(raw["operatingDay"], minutes, raw["DSTFlag"]),
+                "valid_time": _cpt_hour_ending_to_utc(
+                    raw["operatingDay"], end_minutes, raw["DSTFlag"], 60
+                ),
                 "value": pd.to_numeric(raw["total"], errors="coerce").astype("float64"),
             }
         )

@@ -15,7 +15,7 @@ from energex.core.connectors.ercot import (
     ErcotRtSppConnector,
     _cpt_hour_ending_to_utc,
 )
-from energex.core.exceptions import ConfigurationError
+from energex.core.exceptions import ConfigurationError, DataFetchError
 
 TOKEN_URL = (
     "https://ercotb2c.b2clogin.com/ercotb2c.onmicrosoft.com/"
@@ -125,12 +125,94 @@ def test_rt_spp_drops_non_hub_loadzone_points():
 
 def test_cpt_hour_ending_to_utc_summer_and_winter():
     days = pd.Series(["2026-06-25", "2026-01-15"])
-    minutes = pd.Series([60, 60])  # hour ending 01:00
+    end_minutes = pd.Series([60, 60])  # hour ending 01:00
     dst = pd.Series([False, False])
-    out = _cpt_hour_ending_to_utc(days, minutes, dst)
+    out = _cpt_hour_ending_to_utc(days, end_minutes, dst, 60)
     # CDT (summer) = UTC-5 -> 06:00Z; CST (winter) = UTC-6 -> 07:00Z.
     assert out.iloc[0] == pd.Timestamp("2026-06-25T06:00:00Z")
     assert out.iloc[1] == pd.Timestamp("2026-01-15T07:00:00Z")
+
+
+def test_cpt_hour_ending_to_utc_fall_back_keeps_both_repeats_distinct():
+    # 2026-11-01 fall-back: the 01:00-02:00 (hour-ending 02:00) hour repeats. ERCOT marks the
+    # daylight repeat DSTFlag=True (CDT, ends 07:00Z) and the standard repeat False (CST, 08:00Z).
+    days = pd.Series(["2026-11-01", "2026-11-01"])
+    end_minutes = pd.Series([120, 120])  # hour ending 02:00
+    dst = pd.Series([True, False])
+    out = _cpt_hour_ending_to_utc(days, end_minutes, dst, 60)
+    assert out.iloc[0] == pd.Timestamp("2026-11-01T07:00:00Z")  # CDT repeat
+    assert out.iloc[1] == pd.Timestamp("2026-11-01T08:00:00Z")  # CST repeat
+    assert out.iloc[0] != out.iloc[1]  # the two settlement hours must not collapse
+
+
+def test_cpt_hour_ending_to_utc_spring_forward():
+    # 2026-03-08 spring-forward: 02:00-03:00 CST is skipped (ERCOT omits hour-ending 03:00).
+    # Hour-ending 02:00 (still CST, ends at the 02:00 instant that jumps to 03:00 CDT) and the
+    # following CDT hours must convert without collapsing onto one instant.
+    days = pd.Series(["2026-03-08", "2026-03-08"])
+    end_minutes = pd.Series([120, 240])  # HE 02:00 (CST) and HE 04:00 (CDT)
+    dst = pd.Series([False, False])
+    out = _cpt_hour_ending_to_utc(days, end_minutes, dst, 60)
+    # HE 02:00: begins 01:00 CST = 07:00Z, +1h = 08:00Z; HE 04:00: begins 03:00 CDT = 08:00Z,
+    # +1h = 09:00Z. Distinct.
+    assert out.iloc[0] == pd.Timestamp("2026-03-08T08:00:00Z")
+    assert out.iloc[1] == pd.Timestamp("2026-03-08T09:00:00Z")
+
+
+@respx.mock
+def test_dam_spp_fall_back_day_preserves_both_repeated_hours():
+    from energex.core.connectors.ercot import ErcotDamSppConnector
+
+    respx.post(TOKEN_URL).mock(return_value=httpx.Response(200, json=_TOKEN))
+    page = _envelope(
+        _DAM_FIELDS,
+        [
+            ["2026-11-01", "02:00", "HB_HOUSTON", 20.0, True],  # CDT repeat
+            ["2026-11-01", "02:00", "HB_HOUSTON", 21.0, False],  # CST repeat
+        ],
+    )
+    respx.get(DAM_URL).mock(return_value=httpx.Response(200, json=page))
+    result = ErcotDamSppConnector(**_kwargs()).fetch(date(2026, 11, 1), date(2026, 11, 1))
+    # Both physically distinct settlement hours survive (the dedup must not collapse them).
+    assert len(result.frame) == 2
+    assert result.frame["valid_time"].nunique() == 2
+    assert set(result.frame["price"]) == {20.0, 21.0}
+
+
+@respx.mock
+def test_token_mint_does_not_retry_on_4xx():
+    # A 401 (bad creds) must fail fast, not hammer the Azure AD B2C auth endpoint with retries.
+    route = respx.post(TOKEN_URL).mock(
+        return_value=httpx.Response(401, json={"error": "invalid_grant"})
+    )
+    with pytest.raises(httpx.HTTPStatusError):
+        ErcotRtSppConnector(**_kwargs()).fetch(date.today(), date.today())
+    assert route.call_count == 1  # exactly one attempt, no retries on 4xx
+
+
+@respx.mock
+def test_get_pages_raises_when_data_has_no_fields_schema():
+    respx.post(TOKEN_URL).mock(return_value=httpx.Response(200, json=_TOKEN))
+    bad = {  # data rows but no 'fields' column schema -> would silently vanish
+        "data": [[_TODAY, 1, 1, "HB_HOUSTON", "HU", 30.0, False]],
+        "_meta": {"totalPages": 1, "currentPage": 1},
+    }
+    respx.get(RT_URL).mock(return_value=httpx.Response(200, json=bad))
+    with pytest.raises(DataFetchError, match="fields"):
+        ErcotRtSppConnector(**_kwargs()).fetch(date.today(), date.today())
+
+
+@respx.mock
+def test_get_pages_handles_missing_meta_without_truncation():
+    respx.post(TOKEN_URL).mock(return_value=httpx.Response(200, json=_TOKEN))
+    # No _meta envelope at all: a short page must be returned as-is (not dropped, not looped).
+    page = {
+        "data": [[_TODAY, 1, 1, "HB_HOUSTON", "HU", 30.0, False]],
+        "fields": [{"name": n} for n in _RT_FIELDS],
+    }
+    respx.get(RT_URL).mock(return_value=httpx.Response(200, json=page))
+    result = ErcotRtSppConnector(**_kwargs()).fetch(date.today(), date.today())
+    assert set(result.frame["settlement_point"]) == {"HB_HOUSTON"}
 
 
 def test_rt_spp_fails_fast_without_creds(monkeypatch):
