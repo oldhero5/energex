@@ -388,10 +388,15 @@ def eia930_generation_by_fuel(
 
 
 def _commit_ercot(
-    context: dg.AssetExecutionContext, arctic: ArcticDBResource, result, schema
+    context: dg.AssetExecutionContext, arctic: ArcticDBResource, result, schema, *, validation_as_of
 ) -> dg.MaterializeResult:
-    """Gate -> per-instrument bitemporal_merge commit for an ERCOT frame."""
-    frame = quality.validate(result.frame, schema, as_of=result.fetched_at)
+    """Gate -> per-instrument bitemporal_merge commit for an ERCOT frame.
+
+    Freshness is validated against ``validation_as_of`` (the partition's end), NOT wall-clock now,
+    so backfilling an operating day older than the freshness bound does not falsely fail the gate.
+    The bitemporal as_of/fetched_at remain the real knowledge time (``result.fetched_at``).
+    """
+    frame = quality.validate(result.frame, schema, as_of=validation_as_of)
     versions: dict[str, int] = {}
     libs: dict[str, Any] = {}
     for instrument_id, group in frame.groupby("instrument_id", sort=True):
@@ -433,9 +438,10 @@ def _commit_ercot(
 def ercot_rt_spp(
     context: dg.AssetExecutionContext, arctic: ArcticDBResource
 ) -> dg.MaterializeResult:
-    day = context.partition_time_window.start.date()
+    window = context.partition_time_window
+    day = window.start.date()
     result = ErcotRtSppConnector().fetch(day, day)
-    return _commit_ercot(context, arctic, result, schemas.ERCOT_SPP)
+    return _commit_ercot(context, arctic, result, schemas.ERCOT_SPP, validation_as_of=window.end)
 
 
 @dg.asset(
@@ -451,9 +457,10 @@ def ercot_rt_spp(
 def ercot_dam_spp(
     context: dg.AssetExecutionContext, arctic: ArcticDBResource
 ) -> dg.MaterializeResult:
-    day = context.partition_time_window.start.date()
+    window = context.partition_time_window
+    day = window.start.date()
     result = ErcotDamSppConnector().fetch(day, day)
-    return _commit_ercot(context, arctic, result, schemas.ERCOT_SPP)
+    return _commit_ercot(context, arctic, result, schemas.ERCOT_SPP, validation_as_of=window.end)
 
 
 @dg.asset(
@@ -464,9 +471,10 @@ def ercot_dam_spp(
     description="ERCOT-wide actual system load (hourly) -> power.load (bitemporal_merge).",
 )
 def ercot_load(context: dg.AssetExecutionContext, arctic: ArcticDBResource) -> dg.MaterializeResult:
-    day = context.partition_time_window.start.date()
+    window = context.partition_time_window
+    day = window.start.date()
     result = ErcotLoadConnector().fetch(day, day)
-    return _commit_ercot(context, arctic, result, schemas.ERCOT_LOAD)
+    return _commit_ercot(context, arctic, result, schemas.ERCOT_LOAD, validation_as_of=window.end)
 
 
 ASSETS: list[Any] = [
