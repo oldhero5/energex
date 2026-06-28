@@ -24,7 +24,7 @@ docker compose --profile full up -d
 | `dagster-webserver` | Energex (amd64) | 3000 | Dagster UI |
 | `dagster-daemon` | Energex (amd64) | — | Runs schedules/sensors |
 | `neo4j` | Neo4j 5 Community | 7474, 7687 | Optional entity graph |
-| `energex` | Energex | 8000 | Legacy FastAPI service |
+| `api` | Energex | 8000 | S2 read API (`/series`, `/curve`, `/symbols`, `/libraries`) |
 
 A lighter `dev` profile brings up just MinIO, `minio-init`, and `dagster-postgres` for
 local iteration with `uv run dagster dev`.

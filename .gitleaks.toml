@@ -2,9 +2,10 @@
 useDefault = true
 
 [allowlist]
-description = "Test fixtures use obviously-fake placeholder credentials."
+# Narrowly scoped (no blanket tests/ ignore) so a real secret committed under tests/ is still
+# caught; test fixtures use obvious low-entropy fakes the default rules do not flag.
+description = "Placeholder-credential example files and tool caches."
 paths = [
-  '''tests/.*''',
   '''\.env\.example''',
   '''\.mypy_cache/.*''',
   '''\.ruff_cache/.*''',

@@ -2,6 +2,8 @@
 
 import subprocess
 import sys
+from datetime import datetime
+from zoneinfo import ZoneInfo
 
 import dagster as dg
 
@@ -56,3 +58,22 @@ def test_dagster_definitions_validate_cli():
     )
     assert result.returncode == 0, result.stderr
     assert "Validation successful" in (result.stdout + result.stderr)
+
+
+def test_ercot_schedules_target_correct_operating_day():
+    import dagster as dg
+
+    from energex.orchestration.schedules import (
+        ercot_dam_spp_schedule,
+        ercot_load_schedule,
+        ercot_rt_spp_schedule,
+    )
+
+    # 14:00 CPT on operating day D: RT/load capture D (today, intraday); DAM captures D+1
+    # (the next-day curve that cleared midday). A "latest-ended partition" heuristic would
+    # wrongly select D-1 for all three.
+    tick = datetime(2026, 6, 15, 14, 0, tzinfo=ZoneInfo("America/Chicago"))
+    ctx = dg.build_schedule_context(scheduled_execution_time=tick)
+    assert ercot_rt_spp_schedule(ctx).partition_key == "2026-06-15"
+    assert ercot_load_schedule(ctx).partition_key == "2026-06-15"
+    assert ercot_dam_spp_schedule(ctx).partition_key == "2026-06-16"

@@ -13,6 +13,7 @@ D2 = datetime(2024, 1, 8, tzinfo=timezone.utc)
 D3 = datetime(2024, 1, 15, tzinfo=timezone.utc)
 A1 = datetime(2024, 1, 16, 15, 30, tzinfo=timezone.utc)
 A2 = datetime(2024, 1, 23, 15, 30, tzinfo=timezone.utc)
+A3 = datetime(2024, 1, 30, 15, 30, tzinfo=timezone.utc)
 
 
 def _frame(times, values):
@@ -80,3 +81,37 @@ def test_idempotent_recommit_is_a_noop(arctic_lib):
     )
     assert v1 == v2  # same as_of => no new version, original values intact
     assert _close_at(storage.read_as_of(arctic_lib, "CL_CLF26", as_of=A1), D1) == 10.0
+
+
+def test_unchanged_recommit_under_new_as_of_creates_no_new_vintage(arctic_lib):
+    # Re-pulling identical data at a LATER knowledge-time adds no information, so it must not
+    # write a new vintage — otherwise an unchanged hourly ERCOT re-materialization grows the
+    # store without bound. A genuinely changed re-pull still commits.
+    common = {"source": "yf", "source_url": "u", "mode": "bitemporal_merge"}
+    v1 = storage.commit_vintage(
+        arctic_lib,
+        "CL_CLF26",
+        _frame([D1, D2, D3], [10.0, 11.0, 12.0]),
+        as_of=A1,
+        fetched_at=A1,
+        **common,
+    )
+    v2 = storage.commit_vintage(
+        arctic_lib,
+        "CL_CLF26",
+        _frame([D1, D2, D3], [10.0, 11.0, 12.0]),
+        as_of=A2,
+        fetched_at=A2,
+        **common,
+    )
+    assert v2 == v1  # identical payload under a new as_of => no new vintage
+    v3 = storage.commit_vintage(
+        arctic_lib,
+        "CL_CLF26",
+        _frame([D1, D2, D3], [10.0, 11.0, 99.0]),
+        as_of=A3,
+        fetched_at=A3,
+        **common,
+    )
+    assert v3 != v1  # a real revision still creates a vintage
+    assert _close_at(storage.read_as_of(arctic_lib, "CL_CLF26", as_of=A3), D3) == 99.0

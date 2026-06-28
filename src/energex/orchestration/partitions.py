@@ -28,5 +28,10 @@ FRED_DAILY = dg.DailyPartitionsDefinition(start_date="2020-01-01")
 # revisions. The hourly schedule re-materializes the latest (today's) partition.
 EIA930_DAILY = dg.DailyPartitionsDefinition(start_date="2023-06-01")
 
-# ERCOT nodal daily partition (forward-fill; no nodal backfill this slice).
-ERCOT_DAILY = dg.DailyPartitionsDefinition(start_date="2026-06-01")
+# ERCOT nodal daily partition keyed by the ERCOT operating day (Central Prevailing Time, not
+# UTC, so a partition key maps 1:1 to an ERCOT delivery day). end_offset=2 keeps today AND
+# tomorrow as valid keys: RT/load materialize the CURRENT operating day intraday, while the DAM
+# schedule targets the NEXT day's curve that clears midday.
+ERCOT_DAILY = dg.DailyPartitionsDefinition(
+    start_date="2026-06-01", timezone="America/Chicago", end_offset=2
+)

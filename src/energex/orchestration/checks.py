@@ -229,6 +229,11 @@ def eia_petroleum_status_pass_quality_gate(arctic: ArcticDBResource) -> dg.Asset
     )
 
 
+# A power symbol lagging the freshest by more than this is flagged stale in the check metadata
+# (power feeds update at least daily; this is generous headroom for weekends/gaps).
+_STALE_SYMBOL_LAG = pd.Timedelta(days=3)
+
+
 def _power_gate_readback(
     arctic: ArcticDBResource, libraries: list[str], schema: Any, label: str
 ) -> dg.AssetCheckResult:
@@ -247,6 +252,12 @@ def _power_gate_readback(
         return dg.AssetCheckResult(passed=False, metadata={"reason": f"no {label} found"})
     frame = pd.concat(frames, ignore_index=True)
     frame["valid_time"] = pd.to_datetime(frame["valid_time"], utc=True)
+    # Per-symbol staleness: the schema freshness check uses max(valid_time) across ALL symbols,
+    # so a single symbol that stopped updating would not lower it. Surface any symbol lagging the
+    # freshest by more than the threshold in the check metadata (visible in the Dagster UI).
+    latest_by_symbol = frame.groupby("instrument_id")["valid_time"].max()
+    freshest = latest_by_symbol.max()
+    stale = sorted(latest_by_symbol.index[latest_by_symbol < freshest - _STALE_SYMBOL_LAG])
     as_of = _committed_as_of(frame)
     try:
         validated = quality.validate(frame, schema, as_of=as_of)
@@ -257,7 +268,11 @@ def _power_gate_readback(
         )
     return dg.AssetCheckResult(
         passed=True,
-        metadata={"rows": int(len(validated)), "symbols": int(frame["instrument_id"].nunique())},
+        metadata={
+            "rows": int(len(validated)),
+            "symbols": int(frame["instrument_id"].nunique()),
+            "stale_symbols": dg.MetadataValue.json(stale),
+        },
     )
 
 

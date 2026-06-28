@@ -136,6 +136,22 @@ def _empty_like(lib, symbol, idx):
     return lib.read(symbol, as_of=int(v)).data.iloc[0:0]
 
 
+# Per-commit provenance columns; identical underlying data under a new as_of is NOT new
+# knowledge, so these are excluded when deciding whether a commit changes the payload.
+_PROVENANCE_COLS = ("as_of", "source", "source_url", "fetched_at", "vintage_reconstructed")
+
+
+def _same_payload(new, prior) -> bool:
+    """True iff two canonical frames carry identical data (index + non-provenance columns)."""
+    if prior is None:
+        return False
+    a = new.drop(columns=[c for c in _PROVENANCE_COLS if c in new.columns])
+    b = prior.drop(columns=[c for c in _PROVENANCE_COLS if c in prior.columns])
+    if list(a.columns) != list(b.columns) or len(a) != len(b):
+        return False
+    return a.equals(b)
+
+
 # ---------------------------------------------------------------- commit / read
 def commit_vintage(
     lib,
@@ -160,6 +176,15 @@ def commit_vintage(
     if mode == "bitemporal_merge":
         prior = _read_full_series_before(lib, symbol, idx, a)
         cframe = _merge_revisions(prior, cframe)
+    # Content idempotency: if this commit's payload matches the latest committed vintage, a
+    # re-record under a new as_of adds no knowledge — skip it. Without this, an unchanged hourly
+    # re-pull (the ERCOT case) creates a fresh full-history vintage every run (unbounded growth).
+    if not force:
+        latest_v = _latest_committed_version(idx)
+        if latest_v is not None and _same_payload(
+            cframe, lib.read(symbol, as_of=int(latest_v)).data
+        ):
+            return int(latest_v)
     v = lib.write(
         symbol,
         cframe,
@@ -175,7 +200,8 @@ def commit_vintage(
         vintage_reconstructed=reconstructed,
     )
     try:  # UI-only convenience snapshot; correctness never depends on it.
-        lib.snapshot(f"{symbol}@{a:%Y-%m-%dT%H%M%SZ}", versions={symbol: int(v)})
+        # Microsecond resolution so two commits within the same second cannot collide on name.
+        lib.snapshot(f"{symbol}@{a:%Y-%m-%dT%H%M%S_%fZ}", versions={symbol: int(v)})
     except Exception:
         pass
     return int(v)

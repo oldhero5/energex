@@ -8,6 +8,7 @@ scheduled — Yahoo/yfinance is blocked, so a tick would only fire failing runs;
 manual.
 """
 
+from datetime import timedelta
 from typing import Any
 
 import dagster as dg
@@ -59,6 +60,22 @@ def _latest_partition_request(
     if not keys:
         return dg.SkipReason("no partition available yet")
     return dg.RunRequest(partition_key=keys[-1])
+
+
+def _ercot_day_request(
+    context: dg.ScheduleEvaluationContext,
+    partitions_def: dg.TimeWindowPartitionsDefinition,
+    *,
+    day_offset: int,
+) -> dg.RunRequest | dg.SkipReason:
+    """Target an ERCOT operating day relative to the tick (in Central time). RT/load capture the
+    CURRENT day intraday (offset 0); DAM publishes the NEXT day's curve midday (offset +1). The
+    latest-ended-partition heuristic is wrong for both — it lags a full operating day."""
+    tick = context.scheduled_execution_time  # tz-aware in execution_timezone (America/Chicago)
+    key = (tick.date() + timedelta(days=day_offset)).isoformat()
+    if key not in set(partitions_def.get_partition_keys(current_time=tick)):
+        return dg.SkipReason(f"partition {key} not in range yet")
+    return dg.RunRequest(partition_key=key)
 
 
 # EIA natural-gas weekly storage releases Thursday 10:30 ET; fire just after.
@@ -142,7 +159,7 @@ _ercot_load_job = dg.define_asset_job(
 )
 
 
-# RT SPP lands every 15 min; re-materialize the latest partition hourly.
+# RT SPP lands every 15 min; re-materialize the CURRENT operating day hourly (intraday).
 @dg.schedule(
     job=_ercot_rt_spp_job,
     cron_schedule="25 * * * *",
@@ -153,10 +170,10 @@ _ercot_load_job = dg.define_asset_job(
 def ercot_rt_spp_schedule(
     context: dg.ScheduleEvaluationContext,
 ) -> dg.RunRequest | dg.SkipReason:
-    return _latest_partition_request(context, ERCOT_DAILY)
+    return _ercot_day_request(context, ERCOT_DAILY, day_offset=0)
 
 
-# Actual system load posts hourly.
+# Actual system load posts hourly for the current operating day.
 @dg.schedule(
     job=_ercot_load_job,
     cron_schedule="35 * * * *",
@@ -167,10 +184,10 @@ def ercot_rt_spp_schedule(
 def ercot_load_schedule(
     context: dg.ScheduleEvaluationContext,
 ) -> dg.RunRequest | dg.SkipReason:
-    return _latest_partition_request(context, ERCOT_DAILY)
+    return _ercot_day_request(context, ERCOT_DAILY, day_offset=0)
 
 
-# DAM clears ~12:30-13:30 CPT for the next day; refresh once each afternoon.
+# DAM clears ~12:30-13:30 CPT for the NEXT operating day; fetch tomorrow's curve each afternoon.
 @dg.schedule(
     job=_ercot_dam_spp_job,
     cron_schedule="0 14 * * *",
@@ -181,7 +198,7 @@ def ercot_load_schedule(
 def ercot_dam_spp_schedule(
     context: dg.ScheduleEvaluationContext,
 ) -> dg.RunRequest | dg.SkipReason:
-    return _latest_partition_request(context, ERCOT_DAILY)
+    return _ercot_day_request(context, ERCOT_DAILY, day_offset=1)
 
 
 SCHEDULES: list[Any] = [
