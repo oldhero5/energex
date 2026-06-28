@@ -26,7 +26,7 @@ services:
       MINIO_SECRET_KEY: ${ARCTIC_SECRET_KEY:-energex-arctic-secret}
       TZ: UTC
     ports:
-      - "8001:8001"
+      - "8000:8001"
     depends_on:
       minio:
         condition: service_healthy

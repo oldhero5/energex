@@ -94,7 +94,7 @@ Then open:
 - **Dagster UI** — http://localhost:3000 (assets, schedules, run history, backfills)
 - **MinIO console** — http://localhost:9001 (the ArcticDB object store)
 - **Neo4j browser** — http://localhost:7474
-- **Legacy API** — http://localhost:8000
+- **Read API (S2)** — http://localhost:8000 (`/series`, `/curve`, `/symbols`, `/libraries`, `/healthz`)
 
 Four schedules run by default and keep the store current with no manual intervention:
 EIA gas storage (Thursday), EIA petroleum status (Wednesday), FRED spot (weekday
