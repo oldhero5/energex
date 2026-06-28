@@ -116,3 +116,25 @@ def test_rt_spp_fails_fast_without_creds(monkeypatch):
         monkeypatch.delenv(var, raising=False)
     with pytest.raises(ConfigurationError, match="ERCOT"):
         ErcotRtSppConnector().fetch(date.today(), date.today())
+
+
+DAM_URL = f"{BASE}/np4-190-cd/dam_stlmnt_pnt_prices"
+_DAM_FIELDS = ["deliveryDate", "hourEnding", "settlementPoint", "settlementPointPrice", "DSTFlag"]
+
+
+@respx.mock
+def test_dam_spp_shapes_and_filters():
+    from energex.core.connectors.ercot import ErcotDamSppConnector
+
+    respx.post(TOKEN_URL).mock(return_value=httpx.Response(200, json=_TOKEN))
+    page = _envelope(_DAM_FIELDS, [
+        [_TODAY, "01:00", "HB_HOUSTON", 27.47, False],
+        [_TODAY, "02:00", "HB_HOUSTON", 26.00, False],
+        [_TODAY, "01:00", "XYZ_RESOURCE_RN", 30.00, False],  # dropped (not hub/LZ)
+    ])
+    respx.get(DAM_URL).mock(return_value=httpx.Response(200, json=page))
+    result = ErcotDamSppConnector(**_kwargs()).fetch(date.today(), date.today())
+    assert set(result.frame["instrument_id"]) == {"ERCOT.DASPP.HB_HOUSTON"}
+    assert len(result.frame) == 2
+    assert respx.calls.call_count == 2  # token + single (no per-type) page
+    quality.validate(result.frame, schemas.ERCOT_SPP, as_of=result.fetched_at)

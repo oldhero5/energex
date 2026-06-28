@@ -249,5 +249,18 @@ class ErcotRtSppConnector(_ErcotConnector):
         return _finalize_spp("ERCOT.SPP.", raw, valid_time)
 
 
+class ErcotDamSppConnector(_ErcotConnector):
+    """DAM hourly settlement point prices for hubs + load zones -> ERCOT.DASPP.<sp>."""
+
+    report_path = "np4-190-cd/dam_stlmnt_pnt_prices"
+
+    def _shape(self, raw: pd.DataFrame) -> pd.DataFrame:
+        if raw.empty:
+            return _empty_spp()
+        minutes = _hour_ending_to_minutes(raw["hourEnding"])
+        valid_time = _cpt_hour_ending_to_utc(raw["deliveryDate"], minutes, raw["DSTFlag"])
+        return _finalize_spp("ERCOT.DASPP.", raw, valid_time)
+
+
 # Backward-compat alias; removed in the orchestration task once assets import the new name.
 ErcotSppConnector = ErcotRtSppConnector
