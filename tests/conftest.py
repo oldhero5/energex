@@ -2,7 +2,13 @@
 
 from __future__ import annotations
 
-from datetime import date, datetime, timedelta, timezone
+import os
+
+# Set BEFORE any energex import: the suite must not load the repo-root .env, so the offline
+# no-credentials invariant holds regardless of a developer's local .env.
+os.environ["ENERGEX_SKIP_DOTENV"] = "1"
+
+from datetime import date, datetime, timedelta, timezone  # noqa: E402
 
 # NOTE: arcticdb MUST be imported before pandas/pyarrow process-wide (phase0 findings:
 # AWS-SDK symbol collision aborts the process on macOS otherwise). conftest loads before

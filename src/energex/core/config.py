@@ -146,9 +146,6 @@ class ConnectorConfig(BaseSettings):
         default=None,
         validation_alias=AliasChoices("ERCOT_API_KEY_PRIMARY", "ERCOT_SUBSCRIPTION_KEY"),
     )
-    ercot_subscription_key_secondary: SecretStr | None = Field(
-        default=None, validation_alias="ERCOT_API_KEY_SECONDARY"
-    )
     noaa_token: SecretStr | None = Field(default=None, validation_alias="NOAA_TOKEN")
 
     model_config = SettingsConfigDict(case_sensitive=False, populate_by_name=True)

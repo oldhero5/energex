@@ -16,6 +16,24 @@ def test_every_entry_mode_matches_library_class():
         )
 
 
+def test_power_prefix_modes_match_library_class():
+    # The rule-based router (_POWER_PREFIX) must hold the same mode<->library invariant the
+    # static _TABLE guardrail enforces.
+    for prefix, (library, mode) in symbology._POWER_PREFIX.items():
+        assert mode == symbology.LIBRARY_MODE[library], (
+            f"{prefix}: mode {mode!r} != library {library!r} class "
+            f"{symbology.LIBRARY_MODE[library]!r}"
+        )
+
+
+def test_resolve_power_rejects_malformed_ids():
+    # A prefix with no tail, an empty (trailing-dot) tail, or an unknown series must not
+    # resolve to a library — they raise rather than silently mis-route.
+    for bad in ("ERCOT.SPP", "ERCOT.SPP.", "EIA930.D", "EIA930.ZZ.ERCO"):
+        with pytest.raises(SymbologyError):
+            symbology.resolve(bad)
+
+
 def test_resolve_revision_mode_and_symbol_lookups():
     assert symbology.resolve("CME.CL.CLF26") == ("prices.futures", "CL_CLF26")
     assert symbology.revision_mode("CME.CL.CLF26") == "bitemporal_merge"

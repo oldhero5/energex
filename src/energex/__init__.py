@@ -47,15 +47,22 @@ Configuration:
 For more examples, see: src/examples/
 """
 
-# Load the repo-root .env for local runs so nested sub-configs (e.g. ConnectorConfig)
-# that read os.environ-only see credentials. Skipped under pytest to preserve the
-# offline tests' no-creds invariant; deployment injects env via docker-compose.
-import sys
+# Load the repo-root .env for local runs so every config — including nested sub-configs that
+# read os.environ only (e.g. ConnectorConfig) — resolves credentials uniformly through
+# os.environ, with real environment variables always taking precedence (load_dotenv never
+# overrides an existing var). The path is resolved relative to THIS package, never via a
+# CWD/parent-directory search (so a REPL/debugger cannot bind an unintended parent .env). The
+# load is skipped when ENERGEX_SKIP_DOTENV=1 (the test suite sets this to preserve its
+# no-credentials invariant); the deployment injects env via docker-compose and ships no .env.
+import os
+from pathlib import Path
 
-if "pytest" not in sys.modules:
+if os.environ.get("ENERGEX_SKIP_DOTENV") != "1":
     from dotenv import load_dotenv
 
-    load_dotenv()
+    _dotenv_path = Path(__file__).resolve().parents[2] / ".env"
+    if _dotenv_path.is_file():
+        load_dotenv(_dotenv_path)
 
 # Pin ArcticDB's vendored AWS C SDK ahead of pyarrow's (phase-0 load-order hazard):
 # whichever of libarrow / arcticdb_ext loads first wins the AWS symbols, and if
