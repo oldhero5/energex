@@ -20,7 +20,9 @@ def test_definitions_builds_with_intraday_slice():
     assert "eia_petroleum_status" in asset_keys
     assert "eia930_region" in asset_keys
     assert "eia930_generation_by_fuel" in asset_keys
-    assert "ercot_spp" in asset_keys
+    assert "ercot_rt_spp" in asset_keys
+    assert "ercot_dam_spp" in asset_keys
+    assert "ercot_load" in asset_keys
 
     # asset_checks MUST be wired explicitly (spec §5.6); key by check name.
     check_keys = {key.name for key in repo.asset_checks_defs_by_key}
@@ -31,7 +33,9 @@ def test_definitions_builds_with_intraday_slice():
     assert "eia_petroleum_status_pass_quality_gate" in check_keys
     assert "eia930_region_pass_quality_gate" in check_keys
     assert "eia930_generation_by_fuel_pass_quality_gate" in check_keys
-    assert "ercot_spp_pass_quality_gate" in check_keys
+    assert "ercot_rt_spp_pass_quality_gate" in check_keys
+    assert "ercot_dam_spp_pass_quality_gate" in check_keys
+    assert "ercot_load_pass_quality_gate" in check_keys
 
 
 def test_dagster_definitions_validate_cli():

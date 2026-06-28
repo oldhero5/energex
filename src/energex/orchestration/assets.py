@@ -16,7 +16,11 @@ from energex.core.connectors.eia import (
     EiaPetroleumStatusConnector,
 )
 from energex.core.connectors.eia930 import Eia930FuelConnector, Eia930RegionConnector
-from energex.core.connectors.ercot import ErcotSppConnector
+from energex.core.connectors.ercot import (
+    ErcotDamSppConnector,
+    ErcotLoadConnector,
+    ErcotRtSppConnector,
+)
 from energex.core.connectors.fred import FredConnector
 from energex.core.connectors.weather import NOAANClimDivConnector
 from energex.core.connectors.yfinance import YFinanceIntradayConnector
@@ -383,25 +387,17 @@ def eia930_generation_by_fuel(
     return _write_power_degenerate(context, arctic, result, schemas.POWER_GEN_BY_FUEL, None)
 
 
-ERCOT_LMP_LIBRARY = "power.lmp"
-
-
-@dg.asset(
-    name="ercot_spp",
-    group_name="power",
-    compute_kind="arcticdb",
-    partitions_def=ERCOT_DAILY,
-    description="ERCOT RT+DA settlement point prices -> power.lmp (bitemporal_merge).",
-)
-def ercot_spp(context: dg.AssetExecutionContext, arctic: ArcticDBResource) -> dg.MaterializeResult:
-    window = context.partition_time_window
-    result = ErcotSppConnector().fetch(window.start.date(), window.end.date())
-    frame = quality.validate(result.frame, schemas.ERCOT_SPP, as_of=result.fetched_at)
-    lib = arctic.get_library(ERCOT_LMP_LIBRARY)
+def _commit_ercot(
+    context: dg.AssetExecutionContext, arctic: ArcticDBResource, result, schema
+) -> dg.MaterializeResult:
+    """Gate -> per-instrument bitemporal_merge commit for an ERCOT frame."""
+    frame = quality.validate(result.frame, schema, as_of=result.fetched_at)
     versions: dict[str, int] = {}
+    libs: dict[str, Any] = {}
     for instrument_id, group in frame.groupby("instrument_id", sort=True):
-        _library, symbol = symbology.resolve(str(instrument_id))
-        versions[symbol] = storage.commit_vintage(
+        library, symbol = symbology.resolve(str(instrument_id))
+        lib = libs.get(library) or libs.setdefault(library, arctic.get_library(library))
+        versions[f"{library}:{symbol}"] = storage.commit_vintage(
             lib,
             symbol,
             group,
@@ -412,17 +408,67 @@ def ercot_spp(context: dg.AssetExecutionContext, arctic: ArcticDBResource) -> dg
             mode=symbology.revision_mode(str(instrument_id)),
             reconstructed=False,
         )
-    context.log.info("ERCOT SPP committed %d rows across %s", len(frame), sorted(versions))
+    context.log.info("ERCOT committed %d rows across %d symbols", len(frame), len(versions))
     return dg.MaterializeResult(
         metadata={
             "source": result.source,
             "source_url": dg.MetadataValue.url(result.source_url),
             "fetched_at": result.fetched_at.isoformat(),
-            "library": ERCOT_LMP_LIBRARY,
             "rows_total": int(len(frame)),
             "versions": dg.MetadataValue.json(versions),
         }
     )
+
+
+@dg.asset(
+    name="ercot_rt_spp",
+    group_name="power",
+    compute_kind="arcticdb",
+    partitions_def=ERCOT_DAILY,
+    description=(
+        "ERCOT real-time (15-min) settlement point prices, hubs + load zones -> "
+        "power.lmp (bitemporal_merge)."
+    ),
+)
+def ercot_rt_spp(
+    context: dg.AssetExecutionContext, arctic: ArcticDBResource
+) -> dg.MaterializeResult:
+    day = context.partition_time_window.start.date()
+    result = ErcotRtSppConnector().fetch(day, day)
+    return _commit_ercot(context, arctic, result, schemas.ERCOT_SPP)
+
+
+@dg.asset(
+    name="ercot_dam_spp",
+    group_name="power",
+    compute_kind="arcticdb",
+    partitions_def=ERCOT_DAILY,
+    description=(
+        "ERCOT day-ahead-market hourly settlement point prices, hubs + load zones -> "
+        "power.dalmp (bitemporal_merge)."
+    ),
+)
+def ercot_dam_spp(
+    context: dg.AssetExecutionContext, arctic: ArcticDBResource
+) -> dg.MaterializeResult:
+    day = context.partition_time_window.start.date()
+    result = ErcotDamSppConnector().fetch(day, day)
+    return _commit_ercot(context, arctic, result, schemas.ERCOT_SPP)
+
+
+@dg.asset(
+    name="ercot_load",
+    group_name="power",
+    compute_kind="arcticdb",
+    partitions_def=ERCOT_DAILY,
+    description="ERCOT-wide actual system load (hourly) -> power.load (bitemporal_merge).",
+)
+def ercot_load(
+    context: dg.AssetExecutionContext, arctic: ArcticDBResource
+) -> dg.MaterializeResult:
+    day = context.partition_time_window.start.date()
+    result = ErcotLoadConnector().fetch(day, day)
+    return _commit_ercot(context, arctic, result, schemas.ERCOT_LOAD)
 
 
 ASSETS: list[Any] = [
@@ -433,5 +479,7 @@ ASSETS: list[Any] = [
     eia_petroleum_status,
     eia930_region,
     eia930_generation_by_fuel,
-    ercot_spp,
+    ercot_rt_spp,
+    ercot_dam_spp,
+    ercot_load,
 ]

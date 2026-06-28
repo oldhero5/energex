@@ -289,12 +289,30 @@ def eia930_generation_by_fuel_pass_quality_gate(
 
 
 @dg.asset_check(
-    asset="ercot_spp",
-    name="ercot_spp_pass_quality_gate",
-    description="Read-back ERCOT SPP re-pass the ERCOT_SPP gate.",
+    asset="ercot_rt_spp",
+    name="ercot_rt_spp_pass_quality_gate",
+    description="Read-back ERCOT RT SPP re-pass the ERCOT_SPP gate.",
 )
-def ercot_spp_pass_quality_gate(arctic: ArcticDBResource) -> dg.AssetCheckResult:
-    return _power_gate_readback(arctic, ["power.lmp"], schemas.ERCOT_SPP, "ERCOT SPP")
+def ercot_rt_spp_pass_quality_gate(arctic: ArcticDBResource) -> dg.AssetCheckResult:
+    return _power_gate_readback(arctic, ["power.lmp"], schemas.ERCOT_SPP, "ERCOT RT SPP")
+
+
+@dg.asset_check(
+    asset="ercot_dam_spp",
+    name="ercot_dam_spp_pass_quality_gate",
+    description="Read-back ERCOT DAM SPP re-pass the ERCOT_SPP gate.",
+)
+def ercot_dam_spp_pass_quality_gate(arctic: ArcticDBResource) -> dg.AssetCheckResult:
+    return _power_gate_readback(arctic, ["power.dalmp"], schemas.ERCOT_SPP, "ERCOT DAM SPP")
+
+
+@dg.asset_check(
+    asset="ercot_load",
+    name="ercot_load_pass_quality_gate",
+    description="Read-back ERCOT system load re-pass the ERCOT_LOAD gate.",
+)
+def ercot_load_pass_quality_gate(arctic: ArcticDBResource) -> dg.AssetCheckResult:
+    return _power_gate_readback(arctic, ["power.load"], schemas.ERCOT_LOAD, "ERCOT load")
 
 
 CHECKS: list[Any] = [
@@ -305,5 +323,7 @@ CHECKS: list[Any] = [
     eia_petroleum_status_pass_quality_gate,
     eia930_region_pass_quality_gate,
     eia930_generation_by_fuel_pass_quality_gate,
-    ercot_spp_pass_quality_gate,
+    ercot_rt_spp_pass_quality_gate,
+    ercot_dam_spp_pass_quality_gate,
+    ercot_load_pass_quality_gate,
 ]

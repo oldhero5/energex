@@ -295,7 +295,3 @@ class ErcotLoadConnector(_ErcotConnector):
         out = out.dropna(subset=["value"])
         out = out.drop_duplicates(subset=["instrument_id", "valid_time"], keep="last")
         return out.sort_values("valid_time").reset_index(drop=True)[cols]
-
-
-# Backward-compat alias; removed in the orchestration task once assets import the new name.
-ErcotSppConnector = ErcotRtSppConnector

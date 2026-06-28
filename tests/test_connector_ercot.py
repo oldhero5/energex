@@ -44,10 +44,13 @@ def _envelope(fields, rows, *, total_pages=1, current_page=1):
 
 
 def _kwargs():
-    return dict(
-        username="u", password="p", subscription_key="subkey-123",
-        token_url=TOKEN_URL, base_url=BASE,
-    )
+    return {
+        "username": "u",
+        "password": "p",
+        "subscription_key": "subkey-123",
+        "token_url": TOKEN_URL,
+        "base_url": BASE,
+    }
 
 
 @respx.mock
