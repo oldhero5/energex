@@ -13,7 +13,7 @@ Usage:
 """
 
 import polars as pl
-import plotly.graph_objects as go
+
 from energex import EnergyDatabase, FuturesAnalyzer
 
 print("=" * 70)
