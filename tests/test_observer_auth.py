@@ -54,6 +54,23 @@ def test_admin_ping_requires_admin(client, role, code):
     assert client.get("/admin/ping", headers=_token(role)).status_code == code
 
 
+def test_expired_token_is_rejected(client):
+    claims = {
+        "sub": "u1",
+        "exp": int(time.time()) - 1,
+        "aud": "authenticated",
+        "user_role": "viewer",
+    }
+    headers = {"Authorization": f"Bearer {jwt.encode(claims, SECRET, algorithm='HS256')}"}
+    assert client.get("/me", headers=headers).status_code == 401
+
+
+def test_token_missing_aud_is_rejected(client):
+    claims = {"sub": "u1", "exp": int(time.time()) + 3600, "user_role": "viewer"}
+    headers = {"Authorization": f"Bearer {jwt.encode(claims, SECRET, algorithm='HS256')}"}
+    assert client.get("/me", headers=headers).status_code == 401
+
+
 def test_import_succeeds_without_jwt_secret(monkeypatch):
     """Importing energex.observer.app must not raise even when OBSERVER_JWT_SECRET is unset."""
     monkeypatch.delenv("OBSERVER_JWT_SECRET", raising=False)

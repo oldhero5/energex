@@ -35,6 +35,7 @@ def _verified_claims(authorization: str | None) -> dict:
             s.jwt_secret.get_secret_value(),
             algorithms=["HS256"],
             audience=s.jwt_audience,
+            options={"require": ["exp", "aud"]},
         )
     except jwt.PyJWTError as exc:
         raise HTTPException(status_code=401, detail="invalid token") from exc
