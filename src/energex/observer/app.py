@@ -11,7 +11,7 @@ import os
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from energex.observer.routers import catalog, meta
+from energex.observer.routers import catalog, meta, symbol
 
 
 def create_app() -> FastAPI:
@@ -29,6 +29,7 @@ def create_app() -> FastAPI:
 
     app.include_router(meta.router)  # /healthz lives here (open) + /me, /admin/ping
     app.include_router(catalog.router)
+    app.include_router(symbol.router)
     return app
 
 

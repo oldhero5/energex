@@ -31,3 +31,22 @@ def schema_for(library: str, symbol: str) -> pa.DataFrameSchema | None:
     if library == "fundamentals.eia":
         return _EIA_BY_SYMBOL.get(symbol)
     return _BY_LIBRARY.get(library)
+
+
+def describe_schema(schema: pa.DataFrameSchema) -> dict:
+    cols = []
+    for cname, col in schema.columns.items():
+        checks = [str(c) for c in (col.checks or [])]
+        cols.append(
+            {
+                "name": cname,
+                "dtype": str(col.dtype),
+                "nullable": bool(col.nullable),
+                "checks": checks,
+            }
+        )
+    return {
+        "schema_name": schema.name,
+        "columns": cols,
+        "checks": [str(c) for c in (schema.checks or [])],
+    }
