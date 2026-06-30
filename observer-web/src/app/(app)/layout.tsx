@@ -19,9 +19,7 @@ export default async function AppLayout({
 
   const role = roleFromSession(session.access_token);
 
-  // Derive active section from path — default to "overview"
-  // (client-side active tracking handled via usePathname in NavRail consumer if needed;
-  //  for now we pass "overview" as a placeholder — the nav-rail visual state is cosmetic)
+  // active section is fixed until the other section routes exist
   const active = "overview";
 
   return (

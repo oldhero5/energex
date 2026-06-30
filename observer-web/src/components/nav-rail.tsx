@@ -7,12 +7,15 @@ const SECTIONS = [
   { id: "admin", label: "Admin", href: "/admin", role: "admin" as const },
 ];
 
+const ROLE_RANK: Record<string, number> = { viewer: 0, operator: 1, admin: 2 };
+
 export function NavRail({ role, active }: { role: string; active: string }) {
+  const userRank = ROLE_RANK[role] ?? 0;
   return (
     <nav className="w-56 shrink-0 border-r border-line-soft bg-panel p-3">
       <div className="px-2 py-3 num text-accent text-sm tracking-wide">ENERGEX · OBSERVER</div>
       <ul className="mt-2 space-y-0.5">
-        {SECTIONS.filter((s) => !s.role || s.role === role).map((s) => (
+        {SECTIONS.filter((s) => !s.role || userRank >= (ROLE_RANK[s.role] ?? 0)).map((s) => (
           <li key={s.id}>
             <a
               href={s.href}

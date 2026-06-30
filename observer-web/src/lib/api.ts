@@ -14,6 +14,10 @@ export async function apiFetch<T>(path: string): Promise<T> {
 }
 
 export function roleFromSession(accessToken: string): string {
-  const payload = JSON.parse(Buffer.from(accessToken.split(".")[1], "base64").toString());
-  return payload.user_role ?? "viewer";
+  try {
+    const payload = JSON.parse(Buffer.from(accessToken.split(".")[1], "base64url").toString());
+    return typeof payload.user_role === "string" ? payload.user_role : "viewer";
+  } catch {
+    return "viewer";
+  }
 }

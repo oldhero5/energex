@@ -7,11 +7,13 @@ interface Library {
   unreadable: number;
 }
 
-async function getCatalog() {
+async function getCatalog(): Promise<{ libraries: Library[] } | { error: string } | null> {
   try {
     return await apiFetch<{ libraries: Library[] }>("/catalog");
-  } catch {
-    return null;
+  } catch (err) {
+    console.error("[OverviewPage] getCatalog failed:", err);
+    const msg = err instanceof Error ? err.message : String(err);
+    return { error: msg };
   }
 }
 
@@ -23,8 +25,12 @@ export default async function OverviewPage() {
       <h1 className="text-lg font-semibold text-fg">Overview</h1>
       <div className="panel p-4">
         <h2 className="mb-3 text-sm font-medium text-muted">Data Libraries</h2>
-        {data == null ? (
-          <p className="text-sm text-muted">API unavailable — start observer-api to see data.</p>
+        {data == null || "error" in data ? (
+          <p className="text-sm text-muted">
+            {data != null && "error" in data && /: 40[13]/.test(data.error)
+              ? "Couldn't load the catalog — you may not have access. Try signing in again."
+              : "Couldn't load the catalog — confirm observer-api is running and that you're signed in with access."}
+          </p>
         ) : data.libraries.length === 0 ? (
           <p className="text-sm text-muted">No libraries found.</p>
         ) : (
