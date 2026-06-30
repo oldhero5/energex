@@ -27,11 +27,7 @@ def create_app() -> FastAPI:
             allow_headers=["Authorization", "Content-Type"],
         )
 
-    @app.get("/healthz")
-    def healthz() -> dict:
-        return {"status": "ok"}
-
-    app.include_router(meta.router)
+    app.include_router(meta.router)  # /healthz lives here (open) + /me, /admin/ping
     app.include_router(catalog.router)
     return app
 

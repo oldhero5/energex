@@ -28,7 +28,11 @@ def _token(role: str | None) -> dict:
 
 
 def test_healthz_is_open(client):
-    assert client.get("/healthz").status_code == 200
+    # No Authorization header: the Docker healthcheck probe must reach it unauthenticated.
+    r = client.get("/healthz")
+    assert r.status_code == 200
+    assert r.json() == {"status": "ok"}
+    assert "authorization" not in {k.lower() for k in r.request.headers}
 
 
 def test_me_requires_a_valid_token(client):

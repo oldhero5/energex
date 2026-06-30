@@ -69,10 +69,92 @@ services:
         max-size: "10m"
         max-file: "5"
 
+  observer-api:
+    # Data Observer API: role-secured FastAPI over energex.core. Reads ArcticDB for /catalog,
+    # so it needs the observer+storage extras and the same in-network MinIO wiring as `api`.
+    # arcticdb (storage extra) has no linux/arm64 wheel -> build+run amd64 under emulation.
+    build:
+      context: .
+      args:
+        EXTRAS: "--extra observer --extra storage"
+    image: ghcr.io/oldhero5/energex:observer-api
+    platform: linux/amd64
+    container_name: energex-observer-api
+    profiles: ["full", "observer"]
+    init: true
+    restart: unless-stopped
+    mem_limit: 1g
+    cpus: 1.0
+    command: ["uvicorn", "energex.observer.app:app", "--host", "0.0.0.0", "--port", "8090"]
+    env_file:
+      - .env                         # OBSERVER_JWT_SECRET (Supabase HS256 verify key); .env is dockerignored
+    environment:
+      # In-network MinIO: containers reach MinIO at the compose service name, NOT localhost.
+      MINIO_ENDPOINT: minio:9000
+      ARCTIC_BUCKET: ${ARCTIC_BUCKET:-arctic}
+      # Scoped ArcticDB service account created by minio-init (NOT MinIO root).
+      MINIO_ACCESS_KEY: ${ARCTIC_ACCESS_KEY:?set ARCTIC_ACCESS_KEY in .env}
+      MINIO_SECRET_KEY: ${ARCTIC_SECRET_KEY:?set ARCTIC_SECRET_KEY in .env}
+      # CORS scoped to the observer-web origin (host port 8080).
+      OBSERVER_CORS_ORIGINS: http://localhost:8080
+      TZ: UTC
+    ports:
+      - "8090:8090"
+    depends_on:
+      minio:
+        condition: service_healthy
+      minio-init:
+        condition: service_completed_successfully
+    healthcheck:
+      # slim image has no curl; use python urllib against the OPEN /healthz (all else needs a JWT).
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8090/healthz').status==200 else 1)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
+
+  observer-web:
+    # Data Observer frontend (Next.js). NEXT_PUBLIC_* are inlined into the browser bundle at
+    # BUILD time (login uses the Supabase browser client), so they MUST be build args, not just
+    # runtime env. Caveat: NEXT_PUBLIC_SUPABASE_URL must be reachable BOTH from the user's browser
+    # AND from this container's server-side code (proxy.ts/server.ts call Supabase too). With
+    # host-run Supabase these differ (browser=127.0.0.1, container=host.docker.internal); in prod
+    # point it at the deployment host's Supabase URL. Not solved here — a conscious local-dev gap.
+    build:
+      context: ./observer-web
+      args:
+        NEXT_PUBLIC_SUPABASE_URL: ${NEXT_PUBLIC_SUPABASE_URL}
+        NEXT_PUBLIC_SUPABASE_ANON_KEY: ${NEXT_PUBLIC_SUPABASE_ANON_KEY}
+    container_name: energex-observer-web
+    profiles: ["full", "observer"]
+    init: true
+    restart: unless-stopped
+    mem_limit: 1g
+    cpus: 1.0
+    environment:
+      # In-network: server-side code reaches the API at the compose service name, NOT localhost.
+      OBSERVER_API_URL: http://observer-api:8090
+      NEXT_PUBLIC_SUPABASE_URL: ${NEXT_PUBLIC_SUPABASE_URL}
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: ${NEXT_PUBLIC_SUPABASE_ANON_KEY}
+    ports:
+      - "8080:3000"
+    depends_on:
+      - observer-api               # plain ordering: web does not read MinIO, only the API does
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
+
   minio:
     image: quay.io/minio/minio:RELEASE.2025-04-22T22-12-26Z
     container_name: energex-minio
-    profiles: ["dev", "full", "frontend"]   # frontend -> api -> minio dependency chain
+    profiles: ["dev", "full", "frontend", "observer"]   # frontend/observer -> api -> minio dependency chain
     init: true
     restart: unless-stopped
     command: server /data --console-address ":9001"
@@ -101,7 +183,7 @@ services:
   minio-init:
     image: quay.io/minio/mc:RELEASE.2025-04-16T18-13-26Z
     container_name: energex-minio-init
-    profiles: ["dev", "full", "frontend"]   # frontend -> api -> minio-init dependency chain
+    profiles: ["dev", "full", "frontend", "observer"]   # frontend/observer -> api -> minio-init dependency chain
     init: true
     restart: "no"               # one-shot provisioner; unless-stopped would loop forever
     mem_limit: 256m
