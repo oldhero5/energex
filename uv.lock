@@ -661,6 +661,12 @@ llm = [
     { name = "httpx" },
     { name = "openai" },
 ]
+observer = [
+    { name = "fastapi" },
+    { name = "httpx" },
+    { name = "pyjwt" },
+    { name = "uvicorn", extra = ["standard"] },
+]
 orchestration = [
     { name = "dagster" },
     { name = "dagster-postgres" },
@@ -707,10 +713,12 @@ requires-dist = [
     { name = "energex", extras = ["sentiment"], marker = "extra == 'all'" },
     { name = "energex", extras = ["service"], marker = "extra == 'all'" },
     { name = "energex", extras = ["storage"], marker = "extra == 'all'" },
+    { name = "fastapi", marker = "extra == 'observer'", specifier = ">=0.115" },
     { name = "fastapi", marker = "extra == 'service'", specifier = ">=0.110.0" },
     { name = "feedparser", marker = "extra == 'sentiment'", specifier = ">=6.0.0" },
     { name = "httpx", specifier = ">=0.26.0" },
     { name = "httpx", marker = "extra == 'llm'", specifier = ">=0.26.0" },
+    { name = "httpx", marker = "extra == 'observer'", specifier = ">=0.27" },
     { name = "isort", marker = "extra == 'dev'", specifier = ">=5.0.0" },
     { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.0.0" },
     { name = "neo4j", marker = "extra == 'graph'", specifier = ">=5.20.0" },
@@ -725,6 +733,7 @@ requires-dist = [
     { name = "pyarrow", specifier = ">=14.0.0" },
     { name = "pydantic", specifier = ">=2.5.0" },
     { name = "pydantic-settings", specifier = ">=2.1.0" },
+    { name = "pyjwt", marker = "extra == 'observer'", specifier = ">=2.9" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=7.0.0" },
     { name = "pytest-cov", marker = "extra == 'dev'", specifier = ">=4.1.0" },
     { name = "pytest-mock", marker = "extra == 'dev'", specifier = ">=3.12.0" },
@@ -734,10 +743,11 @@ requires-dist = [
     { name = "respx", marker = "extra == 'dev'", specifier = ">=0.20.0" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.1.0" },
     { name = "tenacity", specifier = ">=8.2.0" },
+    { name = "uvicorn", extras = ["standard"], marker = "extra == 'observer'", specifier = ">=0.30" },
     { name = "uvicorn", extras = ["standard"], marker = "extra == 'service'", specifier = ">=0.29.0" },
     { name = "yfinance", specifier = ">=0.2.35" },
 ]
-provides-extras = ["dev", "llm", "sentiment", "service", "orchestration", "storage", "quality", "graph", "all"]
+provides-extras = ["dev", "llm", "sentiment", "observer", "service", "orchestration", "storage", "quality", "graph", "all"]
 
 [[package]]
 name = "exceptiongroup"
@@ -2538,6 +2548,18 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/b0/77/a5b8c569bf593b0140bde72ea885a803b82086995367bf2037de0159d924/pygments-2.19.2.tar.gz", hash = "sha256:636cb2477cec7f8952536970bc533bc43743542f70392ae026374600add5b887", size = 4968631, upload-time = "2025-06-21T13:39:12.283Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/c7/21/705964c7812476f378728bdf590ca4b771ec72385c533964653c68e86bdc/pygments-2.19.2-py3-none-any.whl", hash = "sha256:86540386c03d588bb81d44bc3928634ff26449851e99741617ecb9037ee5ec0b", size = 1225217, upload-time = "2025-06-21T13:39:07.939Z" },
+]
+
+[[package]]
+name = "pyjwt"
+version = "2.13.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "typing-extensions", marker = "python_full_version < '3.11'" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/3b/81/58d0ac84e1ef3a3843791d6954d94c0b33d526c75eeb1efbce9d0a4c4077/pyjwt-2.13.0.tar.gz", hash = "sha256:41571c89ca91598c79e8ef18a2d07367d4810fbbd6f637794879baf1b7703423", size = 107515, upload-time = "2026-05-21T19:54:36.618Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/a3/5e/ecf12fdb62546d64385c158514e9b2b671f7832108ef2ecd2020ce0af2d1/pyjwt-2.13.0-py3-none-any.whl", hash = "sha256:66adcc2aff09b3f1bbd95fc1e1577df8ac8723c978552fd43304c8a290ac5728", size = 31274, upload-time = "2026-05-21T19:54:35.362Z" },
 ]
 
 [[package]]

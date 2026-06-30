@@ -1,0 +1,39 @@
+@import "tailwindcss";
+
+:root {
+  --bg:#0d0d0e; --panel:#141415; --panel-2:#161617; --elev:#1a1b1d;
+  --line:#26262a; --line-soft:#1d1d20;
+  --fg:#ececea; --fg-2:#b8b8b3; --muted:#8a8a86; --faint:#6a6a67;
+  --accent:#d8a657; --accent-dim:#a07d3f; --accent-tint:#1a1206;
+  --ok:#86b8a1; --warn:#caa46a; --fail:#d98a8a;
+  --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+}
+
+@theme {
+  --color-bg: var(--bg);
+  --color-panel: var(--panel);
+  --color-panel-2: var(--panel-2);
+  --color-elev: var(--elev);
+  --color-line: var(--line);
+  --color-line-soft: var(--line-soft);
+  --color-fg: var(--fg);
+  --color-fg-2: var(--fg-2);
+  --color-muted: var(--muted);
+  --color-faint: var(--faint);
+  --color-accent: var(--accent);
+  --color-accent-dim: var(--accent-dim);
+  --color-accent-tint: var(--accent-tint);
+  --color-ok: var(--ok);
+  --color-warn: var(--warn);
+  --color-fail: var(--fail);
+}
+
+html, body {
+  background: var(--bg);
+  color: var(--fg);
+  font-family: -apple-system, "Segoe UI", system-ui, sans-serif;
+}
+
+.num { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+.panel { background: var(--panel); border: 1px solid var(--line-soft); border-radius: 10px; }
+.hair { border-color: var(--line); }
