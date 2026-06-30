@@ -36,9 +36,12 @@ def _vintage_meta(lib, symbol):
     return n, pct
 
 
-def _symbol_meta(lib, library, symbol):
+def _symbol_meta(lib, library, symbol, mode="unknown"):
     row_count, latest_valid_time = _description(lib, symbol)
-    vintage_count, reconstructed_pct = _vintage_meta(lib, symbol)
+    if "bitemporal" in mode:
+        vintage_count, reconstructed_pct = _vintage_meta(lib, symbol)
+    else:
+        vintage_count, reconstructed_pct = None, None
     schema = schema_for(library, symbol)
     return {
         "symbol": symbol,
@@ -63,7 +66,7 @@ def list_catalog() -> dict:
         out, unreadable = [], 0
         for s in sorted(syms):
             try:
-                out.append(_symbol_meta(lib, name, s))
+                out.append(_symbol_meta(lib, name, s, mode=mode))
             except Exception:
                 logger.warning("metadata: symbol %r in %r unreadable — skipping", s, name)
                 unreadable += 1

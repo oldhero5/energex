@@ -54,6 +54,7 @@ def test_list_catalog_reports_cheap_metadata(observer_arctic):  # fixture create
     sym = next(s for s in powerload["symbols"] if s["symbol"] == "erco")
     assert sym["row_count"] == 1
     assert sym["vintage_count"] == 1
+    assert sym["reconstructed_pct"] == 0.0
     assert sym["schema_name"] == "ERCOT_LOAD"
     # the __vintages sidecar symbol must be excluded from the symbol list
     assert all(not s["symbol"].endswith("__vintages") for s in powerload["symbols"])

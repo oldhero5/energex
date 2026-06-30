@@ -100,8 +100,6 @@ def test_catalog_resilient_to_bad_symbol(observer_arctic, arctic_uri, monkeypatc
     # Patch metadata.list_catalog via its get_arctic dependency so bad_sym raises
     import energex.observer.metadata as metadata_mod
 
-    _orig_get_arctic = metadata_mod.get_arctic
-
     def _patched_get_arctic():
         ac = observer_arctic
 
