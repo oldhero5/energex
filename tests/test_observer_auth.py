@@ -48,3 +48,21 @@ def test_me_allows_any_authenticated_role(client, role, code):
 )
 def test_admin_ping_requires_admin(client, role, code):
     assert client.get("/admin/ping", headers=_token(role)).status_code == code
+
+
+def test_import_succeeds_without_jwt_secret(monkeypatch):
+    """Importing energex.observer.app must not raise even when OBSERVER_JWT_SECRET is unset."""
+    monkeypatch.delenv("OBSERVER_JWT_SECRET", raising=False)
+    import importlib
+
+    import energex.observer.app as observer_app
+
+    importlib.reload(observer_app)
+    assert observer_app.app is not None
+    # A protected route must still 401 without a valid token.
+    from fastapi.testclient import TestClient
+
+    monkeypatch.setenv("OBSERVER_JWT_SECRET", SECRET)
+    importlib.reload(observer_app)
+    c = TestClient(observer_app.app)
+    assert c.get("/me").status_code == 401

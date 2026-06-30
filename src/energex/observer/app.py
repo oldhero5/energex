@@ -6,16 +6,19 @@ holding data-store credentials; the browser talks to it with a Supabase JWT only
 
 from __future__ import annotations
 
+import os
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from energex.observer.config import ObserverSettings
 from energex.observer.routers import catalog, meta
 
 
 def create_app() -> FastAPI:
     app = FastAPI(title="Energex Data Observer API")
-    origins = ObserverSettings().origins
+    origins = [
+        o.strip() for o in os.environ.get("OBSERVER_CORS_ORIGINS", "").split(",") if o.strip()
+    ]
     if origins:
         app.add_middleware(
             CORSMiddleware,
