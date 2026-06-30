@@ -1,4 +1,4 @@
-"""/catalog lists libraries + per-library symbol/row counts from ArcticDB; viewer-gated."""
+"""/catalog lists libraries + per-symbol metadata from ArcticDB; viewer-gated."""
 
 from __future__ import annotations
 
@@ -25,11 +25,10 @@ def _hdr(role="viewer"):
 
 
 @pytest.fixture
-def client(arctic_store, arctic_uri, monkeypatch):
+def client(observer_arctic, monkeypatch):
     monkeypatch.setenv("OBSERVER_JWT_SECRET", SECRET)
     monkeypatch.setenv("OBSERVER_CORS_ORIGINS", "")
-    monkeypatch.setenv("ENERGEX_ARCTIC_URI", arctic_uri)
-    lib = arctic_store.create_library("power.lmp")
+    lib = observer_arctic.create_library("power.lmp")
     storage.commit_vintage(
         lib,
         "hb_houston",
@@ -63,17 +62,22 @@ def test_catalog_lists_libraries(client):
     body = client.get("/catalog", headers=_hdr()).json()
     libs = {x["name"]: x for x in body["libraries"]}
     assert "power.lmp" in libs
-    assert libs["power.lmp"]["symbols"] == 1 and libs["power.lmp"]["rows"] == 1
-    assert libs["power.lmp"]["unreadable"] == 0
+    entry = libs["power.lmp"]
+    # symbols is now a list of objects, not a count
+    assert len(entry["symbols"]) == 1
+    sym = entry["symbols"][0]
+    assert sym["symbol"] == "hb_houston"
+    assert sym["row_count"] == 1
+    assert entry["unreadable"] == 0
+    assert entry["mode"] == "bitemporal_merge"
 
 
-def test_catalog_resilient_to_bad_symbol(arctic_store, arctic_uri, monkeypatch):
+def test_catalog_resilient_to_bad_symbol(observer_arctic, arctic_uri, monkeypatch):
     """One corrupt symbol must not 500 the whole /catalog response."""
     monkeypatch.setenv("OBSERVER_JWT_SECRET", SECRET)
     monkeypatch.setenv("OBSERVER_CORS_ORIGINS", "")
-    monkeypatch.setenv("ENERGEX_ARCTIC_URI", arctic_uri)
 
-    lib = arctic_store.create_library("power.bad")
+    lib = observer_arctic.create_library("power.bad")
     for sym in ("good_sym", "bad_sym"):
         storage.commit_vintage(
             lib,
@@ -93,13 +97,13 @@ def test_catalog_resilient_to_bad_symbol(arctic_store, arctic_uri, monkeypatch):
             mode="bitemporal_merge",
         )
 
-    # Patch the catalog router so bad_sym raises during the request
-    import energex.observer.routers.catalog as catalog_mod
+    # Patch metadata.list_catalog via its get_arctic dependency so bad_sym raises
+    import energex.observer.metadata as metadata_mod
 
-    _orig_get_arctic = catalog_mod.get_arctic
+    _orig_get_arctic = metadata_mod.get_arctic
 
     def _patched_get_arctic():
-        ac = arctic_store
+        ac = observer_arctic
 
         class _PatchedArcticProxy:
             def list_libraries(self):
@@ -108,14 +112,14 @@ def test_catalog_resilient_to_bad_symbol(arctic_store, arctic_uri, monkeypatch):
             def __getitem__(self, name):
                 lib_obj = ac[name]
                 if name == "power.bad":
-                    _real_read = lib_obj.read
+                    _real_desc = lib_obj.get_description
 
-                    def _bad_read(sym, *args, **kwargs):
-                        if sym == "bad_sym":
+                    def _bad_desc(s, *args, **kwargs):
+                        if s == "bad_sym":
                             raise RuntimeError("simulated corrupt symbol")
-                        return _real_read(sym, *args, **kwargs)
+                        return _real_desc(s, *args, **kwargs)
 
-                    lib_obj.read = _bad_read
+                    lib_obj.get_description = _bad_desc
                 return lib_obj
 
         return _PatchedArcticProxy()
@@ -123,7 +127,7 @@ def test_catalog_resilient_to_bad_symbol(arctic_store, arctic_uri, monkeypatch):
     from energex.observer.arctic import get_arctic
 
     get_arctic.cache_clear()
-    monkeypatch.setattr(catalog_mod, "get_arctic", _patched_get_arctic)
+    monkeypatch.setattr(metadata_mod, "get_arctic", _patched_get_arctic)
 
     from energex.observer.app import create_app
 
@@ -131,6 +135,7 @@ def test_catalog_resilient_to_bad_symbol(arctic_store, arctic_uri, monkeypatch):
     assert resp.status_code == 200
     libs = {x["name"]: x for x in resp.json()["libraries"]}
     entry = libs["power.bad"]
-    assert entry["symbols"] == 2
-    assert entry["rows"] == 1  # only good_sym counted
+    # good_sym appears in symbols list; bad_sym is counted in unreadable
+    assert len(entry["symbols"]) == 1
+    assert entry["symbols"][0]["symbol"] == "good_sym"
     assert entry["unreadable"] >= 1
