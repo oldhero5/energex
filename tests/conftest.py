@@ -114,3 +114,19 @@ def arctic_store(arctic_uri):
 def arctic_lib(arctic_store):
     """A single throwaway library; storage functions take the Library object directly."""
     return arctic_store.create_library("phase2")
+
+
+@pytest.fixture
+def observer_arctic(arctic_store, arctic_uri, monkeypatch):
+    """LMDB-backed ArcticDB instance monkeypatched into energex.observer.arctic.get_arctic.
+
+    Creates the ``power.load`` library used by observer metadata tests.
+    The test may create additional libraries via ``arctic_store`` if needed.
+    """
+    monkeypatch.setenv("ENERGEX_ARCTIC_URI", arctic_uri)
+    arctic_store.create_library("power.load")
+
+    from energex.observer.arctic import get_arctic
+
+    get_arctic.cache_clear()
+    return arctic_store
