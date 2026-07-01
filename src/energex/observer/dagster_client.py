@@ -134,7 +134,7 @@ def _parse(raw: dict) -> dict:
                     "metadata": {
                         e["label"]: _metadata_value(e) for e in metadata_entries if "label" in e
                     },
-                    "last_run_status": exec_.get("runId"),
+                    "last_run_status": status,
                 }
             )
 

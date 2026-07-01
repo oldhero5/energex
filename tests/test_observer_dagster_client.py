@@ -217,6 +217,37 @@ def test_dagster_client_import_is_safe():
     assert hasattr(dagster_client, "get_pipeline_health")
 
 
+def test_cache_returns_stale_result_within_ttl(monkeypatch):
+    """Second call within TTL must be served from cache without hitting the network."""
+    monkeypatch.setattr(httpx.Client, "post", _fake_post(_HEALTHY_PAYLOAD))
+    dagster_client._CACHE.clear()
+
+    first = dagster_client.get_pipeline_health()
+    assert first["available"] is True
+
+    def _boom(self, *a, **k):
+        raise httpx.ConnectError("must not be called within TTL")
+
+    monkeypatch.setattr(httpx.Client, "post", _boom)
+    second = dagster_client.get_pipeline_health()
+    assert second["available"] is True  # served from cache, no raise
+
+
+def test_parse_data_null_degrades_safely(monkeypatch):
+    """A {data: null, errors: [...]} response must not raise and returns normalized shape."""
+    payload = {"data": None, "errors": [{"message": "something failed"}]}
+    monkeypatch.setattr(httpx.Client, "post", _fake_post(payload))
+    dagster_client._CACHE.clear()
+
+    health = dagster_client.get_pipeline_health()
+
+    assert health["available"] is True
+    assert health["checks"] == []
+    assert health["runs"] == []
+    assert health["schedules"] == []
+    assert health["error"] is None
+
+
 def test_config_accepts_missing_supabase_vars(monkeypatch):
     """ObserverSettings must construct without SUPABASE_URL / SUPABASE_SERVICE_KEY."""
     monkeypatch.setenv("OBSERVER_JWT_SECRET", "test-secret")
