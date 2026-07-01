@@ -1,5 +1,41 @@
 import { createClient } from "@/lib/supabase/server";
 
+export interface CatalogSymbol {
+  symbol: string;
+  row_count: number;
+  latest_valid_time: string | null;
+  vintage_count: number | null;
+  reconstructed_pct: number | null;
+  schema_name: string | null;
+}
+
+export interface CatalogLibrary {
+  name: string;
+  mode: string;
+  symbols: CatalogSymbol[];
+  unreadable: number;
+}
+
+export interface SchemaColumn {
+  name: string;
+  dtype: string;
+  nullable: boolean;
+  checks: string[];
+}
+
+export interface SchemaDescription {
+  schema_name: string | null;
+  columns: SchemaColumn[];
+  checks: string[];
+}
+
+export interface VintageRow {
+  as_of: string;
+  version: string;
+  fetched_at: string | null;
+  vintage_reconstructed: boolean;
+}
+
 export interface OverviewMetrics {
   volume: { libraries: number; symbols: number; rows: number };
   velocity: { ok: number; stale: number; error: number };
