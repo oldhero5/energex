@@ -7,6 +7,7 @@ from fastapi import APIRouter, HTTPException
 from energex.core import storage, symbology
 from energex.observer.arctic import VINTAGE_SUFFIX, get_arctic
 from energex.observer.auth import Role, require_role
+from energex.observer.quality_service import symbol_quality
 from energex.observer.schema_map import describe_schema, schema_for
 
 router = APIRouter(prefix="/symbol/{library}/{symbol}")
@@ -69,6 +70,17 @@ def schema(
             "checks": [],
         }
     return {"library": library, "symbol": symbol, **describe_schema(sch)}
+
+
+@router.get("/quality")
+def quality_endpoint(
+    library: str,
+    symbol: str,
+    as_of: str | None = None,
+    _c: dict = require_role(Role.viewer),  # noqa: B008
+) -> dict:
+    _lib_or_404(library)
+    return symbol_quality(library, symbol, as_of=_parse(as_of))
 
 
 @router.get("/vintages")
