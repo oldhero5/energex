@@ -52,7 +52,13 @@ def series(
     for col in out.columns:
         if str(out[col].dtype).startswith("datetime"):
             out[col] = out[col].astype(str)
-    return {"library": library, "symbol": symbol, "rows": out.to_dict(orient="records")}
+    return {
+        "library": library,
+        "symbol": symbol,
+        "as_of": as_of,
+        "columns": list(out.columns),
+        "rows": out.to_dict(orient="records"),
+    }
 
 
 @router.get("/schema")

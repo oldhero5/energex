@@ -30,7 +30,8 @@ interface Props {
   vintageAsOfs: string[]; // ordered list of as_of ISOs from /vintages
 }
 
-function firstValueColumn(columns: string[]): string | null {
+function firstValueColumn(columns: string[] | undefined | null): string | null {
+  if (!columns || columns.length === 0) return null;
   // Skip valid_time, return first numeric-looking column
   const skip = new Set(["valid_time", "symbol", "library"]);
   return columns.find((c) => !skip.has(c)) ?? null;

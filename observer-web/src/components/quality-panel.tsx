@@ -11,7 +11,7 @@ interface FailureRow {
 interface QualityResponse {
   library: string;
   symbol: string;
-  passed: boolean;
+  passed: boolean | null;
   failures: FailureRow[];
   gaps: number;
   anomalies: Record<string, unknown> | null;
@@ -73,7 +73,11 @@ export function QualityPanel({ library, symbol }: Props) {
       {/* Gate verdict */}
       <div className="flex items-center gap-3">
         <span className="text-xs text-muted">Quality gate</span>
-        {data.passed ? (
+        {data.passed === null ? (
+          <span className="rounded px-2 py-0.5 text-xs font-medium bg-elev border border-line-soft text-muted">
+            No schema registered
+          </span>
+        ) : data.passed ? (
           <span className="rounded px-2 py-0.5 text-xs font-medium bg-ok/15 border border-ok/30 text-ok">
             pass
           </span>

@@ -82,11 +82,21 @@ def test_series_point_in_time(observer_client, observer_arctic):
         "/symbol/power.load/erco/series", params={"as_of": "2026-06-03T00:00:00Z"}
     )
     assert r.status_code == 200
-    rows = r.json()["rows"]
+    body = r.json()
+    rows = body["rows"]
     assert rows[-1]["value"] == 40000.0
-    # latest (no as_of) -> sees the revision
+    # contract: columns list must be present and include "value"
+    assert isinstance(body["columns"], list)
+    assert len(body["columns"]) > 0
+    assert "value" in body["columns"]
+    # contract: as_of echoed back when provided
+    assert body["as_of"] == "2026-06-03T00:00:00Z"
+    # latest (no as_of) -> sees the revision; as_of is null when not requested
     r2 = observer_client.get("/symbol/power.load/erco/series")
-    assert r2.json()["rows"][-1]["value"] == 41000.0
+    body2 = r2.json()
+    assert body2["rows"][-1]["value"] == 41000.0
+    assert body2["as_of"] is None
+    assert "value" in body2["columns"]
 
 
 def test_series_requires_auth(observer_arctic, monkeypatch):
