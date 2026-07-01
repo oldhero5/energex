@@ -5,6 +5,7 @@ import datetime as dt
 from fastapi import APIRouter, HTTPException
 
 from energex.core import storage, symbology
+from energex.core.exceptions import SymbologyError
 from energex.observer.arctic import VINTAGE_SUFFIX, get_arctic
 from energex.observer.auth import Role, require_role
 from energex.observer.quality_service import symbol_quality
@@ -80,7 +81,10 @@ def quality_endpoint(
     _c: dict = require_role(Role.viewer),  # noqa: B008
 ) -> dict:
     _lib_or_404(library)
-    return symbol_quality(library, symbol, as_of=_parse(as_of))
+    try:
+        return symbol_quality(library, symbol, as_of=_parse(as_of))
+    except SymbologyError as exc:
+        raise HTTPException(422, f"library {library!r} has no known revision mode") from exc
 
 
 @router.get("/vintages")

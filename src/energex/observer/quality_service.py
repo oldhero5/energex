@@ -60,12 +60,17 @@ def symbol_quality(library: str, symbol: str, as_of: dt.datetime | None = None) 
         if len(deltas):
             modal = deltas.mode().to_list()[0]
             result["gaps"] = int((deltas > modal).sum()) if modal else 0
-    # OHLCV-only anomaly summary (requires Symbol and Datetime columns)
+    # OHLCV-only anomaly summary.
+    # The stored frame uses `instrument_id` (not `Symbol`) with a `Datetime` index.
+    # We adapt it: reset the index to materialise `Datetime`, rename `instrument_id`
+    # -> `Symbol`, and hand the Polars frame to DataQualityChecker.
     if _OHLCV_COLS.issubset(set(df.columns)):
+        flat = df.reset_index()  # Datetime index -> column
+        if "instrument_id" in flat.columns:
+            flat = flat.rename(columns={"instrument_id": "Symbol"})
         try:
-            result["anomalies"] = DataQualityChecker(
-                pl.from_pandas(df.reset_index())
-            ).check_tick_quality()
-        except Exception:
+            result["anomalies"] = DataQualityChecker(pl.from_pandas(flat)).check_tick_quality()
+        except Exception as exc:
             result["anomalies"] = None
+            result["anomalies_note"] = f"anomaly check unavailable: {exc}"
     return result

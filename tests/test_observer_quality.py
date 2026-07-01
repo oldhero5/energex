@@ -131,3 +131,42 @@ def test_quality_endpoint_requires_auth(observer_arctic, monkeypatch):
 def test_quality_unknown_library_returns_404(observer_client):
     r = observer_client.get("/symbol/no.such.lib/x/quality")
     assert r.status_code == 404
+
+
+def _ohlcv_frame(symbol: str, n: int = 5) -> pd.DataFrame:
+    base = pd.Timestamp("2026-01-02 14:30:00", tz="UTC")
+    rows = []
+    for i in range(n):
+        vt = base + pd.Timedelta(minutes=i)
+        px = 75.0 + i * 0.1
+        rows.append(
+            {
+                "instrument_id": [symbol],
+                "valid_time": [vt],
+                "Open": [px],
+                "High": [px + 0.2],
+                "Low": [px - 0.2],
+                "Close": [px + 0.05],
+                "Volume": [1000 + i * 10],
+            }
+        )
+    return pd.concat([pd.DataFrame(r) for r in rows], ignore_index=True)
+
+
+def test_symbol_quality_ohlcv_anomalies_not_silent_noop(observer_arctic):
+    """OHLCV anomaly path adapts instrument_id->Symbol; result is a real dict, not None."""
+    observer_arctic.create_library("prices.intraday")
+    lib = observer_arctic["prices.intraday"]
+    fetched_at = dt.datetime.now(dt.timezone.utc)
+    storage.write_bars(
+        lib, "CL_FRONT", _ohlcv_frame("CME.CL.FRONT"), fetched_at=fetched_at, mode="degenerate"
+    )
+
+    from energex.observer import quality_service
+
+    res = quality_service.symbol_quality("prices.intraday", "CL_FRONT", as_of=None)
+    assert isinstance(res["anomalies"], dict), (
+        f"expected dict, got: {res.get('anomalies_note', res['anomalies'])}"
+    )
+    assert "total_records" in res["anomalies"]
+    assert res["anomalies"]["total_records"] == 5
