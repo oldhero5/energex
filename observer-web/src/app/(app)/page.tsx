@@ -1,61 +1,82 @@
 import { apiFetch } from "@/lib/api";
+import type { OverviewMetrics, HealthRow } from "@/lib/api";
+import { FourVTiles } from "@/components/four-v-tiles";
+import { FreshnessHeatmap } from "@/components/freshness-heatmap";
+import { BrokenRail } from "@/components/broken-rail";
 
-interface Library {
-  name: string;
-  symbols: number;
-  rows: number;
-  unreadable: number;
-}
-
-async function getCatalog(): Promise<{ libraries: Library[] } | { error: string } | null> {
+async function getOverview(): Promise<OverviewMetrics | { error: string } | null> {
   try {
-    return await apiFetch<{ libraries: Library[] }>("/catalog");
+    return await apiFetch<OverviewMetrics>("/metrics/overview");
   } catch (err) {
-    console.error("[OverviewPage] getCatalog failed:", err);
+    console.error("[OverviewPage] getOverview failed:", err);
     const msg = err instanceof Error ? err.message : String(err);
     return { error: msg };
   }
 }
 
+async function getHealth(): Promise<{ rows: HealthRow[] } | { error: string } | null> {
+  try {
+    return await apiFetch<{ rows: HealthRow[] }>("/metrics/health");
+  } catch (err) {
+    console.error("[OverviewPage] getHealth failed:", err);
+    const msg = err instanceof Error ? err.message : String(err);
+    return { error: msg };
+  }
+}
+
+function isAuthError(msg: string): boolean {
+  return /: 40[13]/.test(msg);
+}
+
+function ErrorBanner({ message }: { message: string }) {
+  const authError = isAuthError(message);
+  return (
+    <div className="panel p-4">
+      <p className="text-sm text-muted">
+        {authError
+          ? "Couldn't load data — you may not have access. Try signing in again."
+          : "Couldn't load data — confirm observer-api is running and that you're signed in with access."}
+      </p>
+    </div>
+  );
+}
+
 export default async function OverviewPage() {
-  const data = await getCatalog();
+  const [overview, health] = await Promise.all([getOverview(), getHealth()]);
+
+  const overviewError = overview == null || "error" in overview;
+  const healthError = health == null || "error" in health;
 
   return (
     <div className="space-y-6">
       <h1 className="text-lg font-semibold text-fg">Overview</h1>
-      <div className="panel p-4">
-        <h2 className="mb-3 text-sm font-medium text-muted">Data Libraries</h2>
-        {data == null || "error" in data ? (
-          <p className="text-sm text-muted">
-            {data != null && "error" in data && /: 40[13]/.test(data.error)
-              ? "Couldn't load the catalog — you may not have access. Try signing in again."
-              : "Couldn't load the catalog — confirm observer-api is running and that you're signed in with access."}
-          </p>
-        ) : data.libraries.length === 0 ? (
-          <p className="text-sm text-muted">No libraries found.</p>
-        ) : (
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-line text-left text-muted">
-                <th className="pb-2 font-medium">Library</th>
-                <th className="pb-2 font-medium num">Symbols</th>
-                <th className="pb-2 font-medium num">Rows</th>
-                <th className="pb-2 font-medium num">Unreadable</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-line-soft">
-              {data.libraries.map((lib) => (
-                <tr key={lib.name}>
-                  <td className="py-2 text-fg">{lib.name}</td>
-                  <td className="py-2 num text-fg-2">{lib.symbols}</td>
-                  <td className="py-2 num text-fg-2">{lib.rows.toLocaleString()}</td>
-                  <td className="py-2 num text-muted">{lib.unreadable}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </div>
+
+      {overviewError ? (
+        <ErrorBanner
+          message={overview != null && "error" in overview ? overview.error : "unavailable"}
+        />
+      ) : (
+        <FourVTiles metrics={overview} />
+      )}
+
+      {healthError ? (
+        <ErrorBanner
+          message={health != null && "error" in health ? health.error : "unavailable"}
+        />
+      ) : (
+        <>
+          <FreshnessHeatmap rows={health.rows} />
+          <BrokenRail
+            items={
+              overviewError
+                ? health.rows
+                    .filter((r) => r.freshness_status !== "ok")
+                    .map((r) => ({ library: r.library, symbol: r.symbol }))
+                : overview.veracity.broken_symbols
+            }
+          />
+        </>
+      )}
     </div>
   );
 }
