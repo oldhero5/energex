@@ -68,7 +68,7 @@ export default async function CatalogPage({
   let vintages: VintageRow[] = [];
   let vintagesError: string | null = null;
 
-  if (selectedLibrary && selectedSymbol) {
+  if (selectedLibrary && selectedSymbol && selectedSym) {
     const base = `/symbol/${selectedLibrary}/${selectedSymbol}`;
 
     const [schemaResult, vintagesResult] = await Promise.allSettled([

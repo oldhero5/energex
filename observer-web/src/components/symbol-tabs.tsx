@@ -2,6 +2,8 @@
 
 import { useState } from "react";
 import type { CatalogSymbol, SchemaDescription, VintageRow } from "@/lib/api";
+import { SeriesChart } from "./series-chart";
+import { QualityPanel } from "./quality-panel";
 
 type Tab = "overview" | "schema" | "vintages" | "series" | "quality";
 
@@ -131,7 +133,7 @@ function VintagesTab({ vintages }: { vintages: VintageRow[] }) {
           {vintages.map((v, i) => (
             <tr key={i} className="border-b border-line-soft/40 hover:bg-elev/50">
               <td className="py-1.5 pr-4 num text-fg">{v.as_of}</td>
-              <td className="py-1.5 pr-4 num text-fg-2">{v.version}</td>
+              <td className="py-1.5 pr-4 num text-fg-2">{String(v.version)}</td>
               <td className="py-1.5 pr-4 num text-fg-2">{v.fetched_at ?? "—"}</td>
               <td className="py-1.5">
                 <span className={v.vintage_reconstructed ? "text-warn num" : "text-ok num"}>
@@ -142,14 +144,6 @@ function VintagesTab({ vintages }: { vintages: VintageRow[] }) {
           ))}
         </tbody>
       </table>
-    </div>
-  );
-}
-
-function PlaceholderTab({ label }: { label: string }) {
-  return (
-    <div className="rounded border border-line-soft/60 bg-elev/40 px-4 py-6 text-center">
-      <p className="text-sm text-muted">{label} — loads in Task 7</p>
     </div>
   );
 }
@@ -181,8 +175,16 @@ export function SymbolTabs({ library, sym, schema, vintages }: Props) {
         {active === "overview" && <OverviewTab library={library} sym={sym} />}
         {active === "schema" && <SchemaTab schema={schema} />}
         {active === "vintages" && <VintagesTab vintages={vintages} />}
-        {active === "series" && <PlaceholderTab label="Series chart" />}
-        {active === "quality" && <PlaceholderTab label="Quality report" />}
+        {active === "series" && (
+          <SeriesChart
+            library={library}
+            symbol={sym.symbol}
+            vintageAsOfs={vintages.map((v) => v.as_of)}
+          />
+        )}
+        {active === "quality" && (
+          <QualityPanel library={library} symbol={sym.symbol} />
+        )}
       </div>
     </div>
   );

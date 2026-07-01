@@ -31,7 +31,7 @@ export interface SchemaDescription {
 
 export interface VintageRow {
   as_of: string;
-  version: string;
+  version: number;
   fetched_at: string | null;
   vintage_reconstructed: boolean;
 }
