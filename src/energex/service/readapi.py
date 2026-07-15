@@ -17,6 +17,7 @@ import hmac
 import json
 import logging
 import os
+import threading
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from typing import Any
@@ -27,9 +28,9 @@ import pandas as pd
 from fastapi import Depends, FastAPI, Header, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 
-from energex.core import storage, symbology
+from energex.core import graph, storage, symbology
 from energex.core.config import get_settings
-from energex.core.exceptions import SymbologyError
+from energex.core.exceptions import GraphError, SymbologyError
 
 logger = logging.getLogger(__name__)
 
@@ -114,6 +115,21 @@ def _require_api_key(x_api_key: str | None = Header(default=None)) -> None:
         raise HTTPException(status_code=401, detail="missing or invalid API key")
 
 
+def _get_graph_driver(app: FastAPI) -> Any:
+    """Lazily connect the entity-graph driver on first use (the neo4j service is
+    optional and may start after the api). Serialized by a lock: endpoints run in
+    FastAPI's threadpool. 503 when the graph is genuinely unreachable."""
+    if app.state.neo4j is None:
+        with app.state.neo4j_lock:
+            if app.state.neo4j is None:
+                try:
+                    app.state.neo4j = graph.create_driver(get_settings().neo4j)
+                except GraphError as exc:
+                    logger.warning("entity graph unavailable: %s", exc)
+                    raise HTTPException(status_code=503, detail="entity graph unavailable") from exc
+    return app.state.neo4j
+
+
 def create_app() -> FastAPI:
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
@@ -127,10 +143,18 @@ def create_app() -> FastAPI:
         except Exception as exc:  # pragma: no cover - defensive
             logger.error("ArcticDB connection failed: %s", type(exc).__name__)
             raise
+        # The entity graph is OPTIONAL: never fail startup on it. Connect lazily
+        # so a late-starting neo4j container is picked up by the first /graph/*
+        # request rather than requiring an api restart.
+        app.state.neo4j = None
+        app.state.neo4j_lock = threading.Lock()
         logger.info("energex S2 read API started")
         try:
             yield
         finally:
+            if app.state.neo4j is not None:
+                app.state.neo4j.close()
+                app.state.neo4j = None
             app.state.arctic = None
             logger.info("energex S2 read API stopped")
 
@@ -158,7 +182,15 @@ def create_app() -> FastAPI:
             latest = _latest_as_of(ac)
         except Exception:  # pragma: no cover - health must not fail on the latest probe
             latest = None
-        return {"status": "ok", "libraries": libraries, "latest_as_of": latest}
+        return {
+            "status": "ok",
+            "libraries": libraries,
+            "latest_as_of": latest,
+            # Cached state only (no connect attempt): the compose healthcheck
+            # budget is 5s and the graph is optional. True after the first
+            # successful /graph/* call.
+            "graph": app.state.neo4j is not None,
+        }
 
     @app.get("/libraries", dependencies=[Depends(_require_api_key)])
     def libraries() -> list[str]:
@@ -212,6 +244,30 @@ def create_app() -> FastAPI:
                 status_code=404, detail=f"unknown commodity: {commodity!r}"
             ) from exc
         return _records(df)
+
+    @app.get("/graph/entities", dependencies=[Depends(_require_api_key)])
+    def graph_entities(label: str | None = Query(default=None)) -> list[dict[str, Any]]:
+        if label is not None and label not in graph.KEY_PROPERTY:
+            raise HTTPException(status_code=404, detail=f"unknown label: {label!r}")
+        driver = _get_graph_driver(app)
+        try:
+            return graph.list_entities(driver, label=label)
+        except GraphError as exc:
+            raise HTTPException(status_code=503, detail="entity graph unavailable") from exc
+
+    @app.get("/graph/related", dependencies=[Depends(_require_api_key)])
+    def graph_related(
+        instrument_id: str = Query(...),
+        depth: int = Query(default=2, ge=1, le=3),
+    ) -> dict[str, Any]:
+        driver = _get_graph_driver(app)
+        try:
+            result = graph.related_instruments(driver, instrument_id, depth=depth)
+        except GraphError as exc:
+            raise HTTPException(status_code=503, detail="entity graph unavailable") from exc
+        if result is None:
+            raise HTTPException(status_code=404, detail=f"unknown instrument: {instrument_id!r}")
+        return result
 
     return app
 
