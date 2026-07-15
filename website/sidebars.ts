@@ -9,6 +9,7 @@ const sidebars: SidebarsConfig = {
     'data-sources-connectors',
     'storage-point-in-time',
     'orchestration',
+    'entity-graph',
     'deployment',
     'operations',
     'testing',

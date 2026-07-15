@@ -74,8 +74,12 @@ sources ──> Connector ──> quality gate ──> ArcticDB (MinIO)
 > **yfinance is dev-only and unscheduled.** Yahoo frequently blocks programmatic
 > access, so a schedule would only fire failing runs. The asset stays manual.
 
-An optional **Neo4j** entity graph references these instruments by symbol but never
-owns the numbers.
+An optional **Neo4j entity graph** mirrors the *identity* layer — instruments,
+balancing authorities, ERCOT hubs and load zones, NOAA regions, commodities, and
+observed fuel types — with a daily idempotent MERGE sync (`entity_graph` asset). It
+references instruments by symbol but never owns the numbers, and it powers the
+read API's `/graph/entities` and `/graph/related` discovery endpoints. See the
+[entity graph docs](website/docs/entity-graph.md).
 
 ## Quickstart
 
@@ -94,7 +98,7 @@ Then open:
 - **Dagster UI** — http://localhost:3000 (assets, schedules, run history, backfills)
 - **MinIO console** — http://localhost:9001 (the ArcticDB object store)
 - **Neo4j browser** — http://localhost:7474
-- **Read API (S2)** — http://localhost:8000 (`/series`, `/curve`, `/symbols`, `/libraries`, `/healthz`)
+- **Read API (S2)** — http://localhost:8000 (`/series`, `/curve`, `/symbols`, `/libraries`, `/graph/entities`, `/graph/related`, `/healthz`)
 
 Four schedules run by default and keep the store current with no manual intervention:
 EIA gas storage (Thursday), EIA petroleum status (Wednesday), FRED spot (weekday
