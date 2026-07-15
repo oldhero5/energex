@@ -14,7 +14,8 @@ import arcticdb  # noqa: F401
 import dagster as dg
 
 from energex.core import graph, symbology
-from energex.core.exceptions import SymbologyError
+from energex.core.config import Neo4jConfig
+from energex.core.exceptions import GraphError, SymbologyError
 from energex.orchestration.resources import ArcticDBResource, Neo4jResource
 
 # Rows per generation_by_fuel tail read: ~hourly x ~10 fuels x 3 days, rounded up.
@@ -128,7 +129,10 @@ _entity_graph_job = dg.define_asset_job(
 )
 
 
-# Daily catalog refresh; 06:10 NY avoids the :20-:35 ingestion window.
+# Daily catalog refresh; 06:10 NY avoids the :20-:35 ingestion window. The graph
+# is optional (neo4j runs only under the `full` compose profile), so the tick
+# probes reachability and SKIPS instead of firing a guaranteed-failing run in
+# profiles without a neo4j server.
 @dg.schedule(
     job=_entity_graph_job,
     cron_schedule="10 6 * * *",
@@ -138,7 +142,12 @@ _entity_graph_job = dg.define_asset_job(
 )
 def entity_graph_schedule(
     context: dg.ScheduleEvaluationContext,
-) -> dg.RunRequest:
+) -> dg.RunRequest | dg.SkipReason:
+    try:
+        driver = graph.create_driver(Neo4jConfig())
+    except GraphError:
+        return dg.SkipReason("neo4j unreachable; entity-graph sync skipped (optional service)")
+    driver.close()
     return dg.RunRequest()
 
 

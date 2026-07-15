@@ -18,6 +18,7 @@ import json
 import logging
 import os
 import threading
+import time
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from typing import Any
@@ -35,6 +36,11 @@ from energex.core.exceptions import GraphError, SymbologyError
 logger = logging.getLogger(__name__)
 
 VINTAGE_SUFFIX = "__vintages"
+
+# Minimum seconds between graph connect attempts. create_driver blocks up to ~5s
+# against an unreachable server; without a backoff, a burst of /graph/* requests
+# would queue threadpool workers on the connect lock and stall series endpoints.
+GRAPH_RETRY_SECONDS = 15.0
 
 
 def _resolve_arctic_uri() -> str:
@@ -118,13 +124,19 @@ def _require_api_key(x_api_key: str | None = Header(default=None)) -> None:
 def _get_graph_driver(app: FastAPI) -> Any:
     """Lazily connect the entity-graph driver on first use (the neo4j service is
     optional and may start after the api). Serialized by a lock: endpoints run in
-    FastAPI's threadpool. 503 when the graph is genuinely unreachable."""
+    FastAPI's threadpool. After a failed connect, further attempts fail fast for
+    GRAPH_RETRY_SECONDS so an unreachable graph cannot stall the threadpool.
+    503 when the graph is genuinely unreachable."""
     if app.state.neo4j is None:
         with app.state.neo4j_lock:
             if app.state.neo4j is None:
+                now = time.monotonic()
+                if now < app.state.neo4j_next_retry:
+                    raise HTTPException(status_code=503, detail="entity graph unavailable")
                 try:
                     app.state.neo4j = graph.create_driver(get_settings().neo4j)
                 except GraphError as exc:
+                    app.state.neo4j_next_retry = now + GRAPH_RETRY_SECONDS
                     logger.warning("entity graph unavailable: %s", exc)
                     raise HTTPException(status_code=503, detail="entity graph unavailable") from exc
     return app.state.neo4j
@@ -148,6 +160,7 @@ def create_app() -> FastAPI:
         # request rather than requiring an api restart.
         app.state.neo4j = None
         app.state.neo4j_lock = threading.Lock()
+        app.state.neo4j_next_retry = 0.0
         logger.info("energex S2 read API started")
         try:
             yield

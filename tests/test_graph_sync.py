@@ -83,12 +83,27 @@ def test_create_driver_without_neo4j_extra_raises_graph_error(monkeypatch):
         graph.create_driver(Neo4jConfig())
 
 
+class FakeNeo4jDateTime:
+    """Mimics neo4j.time.DateTime: exposes to_native() -> datetime."""
+
+    def __init__(self, dt):
+        self._dt = dt
+
+    def to_native(self):
+        return self._dt
+
+
 def test_list_entities_validates_label_and_cleans_records():
     records = [
         {
             "label": "Instrument",
             "key": "FRED.WTI.SPOT",
-            "properties": {"instrument_id": "FRED.WTI.SPOT", "first_seen": SYNCED_AT},
+            # exercise the real driver contract: temporal props arrive as
+            # neo4j.time.DateTime-like objects, not python datetimes
+            "properties": {
+                "instrument_id": "FRED.WTI.SPOT",
+                "first_seen": FakeNeo4jDateTime(SYNCED_AT),
+            },
         }
     ]
     driver = FakeDriver(results={"MATCH": records})
@@ -97,6 +112,22 @@ def test_list_entities_validates_label_and_cleans_records():
     assert rows[0]["properties"]["first_seen"] == SYNCED_AT.isoformat()
     with pytest.raises(GraphError, match="unknown label"):
         graph.list_entities(driver, label="DropAllTables")
+
+
+def test_list_entities_cypher_shape_for_label_and_none():
+    driver = FakeDriver()
+    graph.list_entities(driver, label="Market")
+    graph.list_entities(driver)  # label=None must match ALL nodes, not :None
+    labelled, unlabelled = driver.calls[0][0], driver.calls[1][0]
+    assert labelled.startswith("MATCH (n:Market)")
+    assert unlabelled.startswith("MATCH (n)\n")
+    assert "None" not in unlabelled
+
+
+def test_redact_uri_strips_userinfo_with_and_without_scheme():
+    assert graph._redact_uri("bolt://user:secret@host:7687") == "bolt://host:7687"
+    assert graph._redact_uri("user:secret@host:7687") == "host:7687"
+    assert graph._redact_uri("bolt://host:7687") == "bolt://host:7687"
 
 
 def test_related_instruments_unknown_returns_none_and_depth_validated():

@@ -47,6 +47,13 @@ Relationships:
   aggregate**, not a settlement point.
 - `(SettlementPoint)-[:IN_MARKET]->(Market)` — the 13 canonical tradeable points.
 - `(BalancingAuthority)-[:GENERATES]->(FuelType)` — observed generation-by-fuel mix.
+  :::caution
+  Currently **under-reported**: the degenerate write path deduplicates
+  generation-by-fuel rows on timestamp alone, so only one fuel per (BA, hour)
+  survives in storage today. The discovery reads whatever the store has and heals
+  automatically once that storage fix lands; until then expect one or two fuels per
+  BA, not the full mix.
+  :::
 - Curated cross-domain edges: `(ERCO)-[:OPERATES]->(ERCOT)` (the EIA-930 ↔ ERCOT
   nodal join point), `(TEXAS)-[:WEATHER_PROXY_FOR]->(ERCOT)` (nClimDiv Texas is the
   documented ERCOT footprint), and `(NATGAS)-[:FUELS]->(NG)` when gas-fired

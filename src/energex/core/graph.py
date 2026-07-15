@@ -220,7 +220,11 @@ def build_entity_graph(observed: ObservedEntities | None = None) -> GraphPlan:
 
     # ERCO is seeded statically: it is the join point between the EIA-930 BA
     # universe and the ERCOT nodal universe, whether or not it was observed yet.
-    bas = sorted(set(observed.balancing_authorities) | {"ERCO"})
+    # fuel_types_by_ba keys are unioned in: the two observed inputs come from
+    # different libraries (different assets), so a BA can appear in one and not
+    # the other — every GENERATES endpoint must be a full plan node, never a
+    # bare node silently MERGEd into existence by an edge statement.
+    bas = sorted(set(observed.balancing_authorities) | set(observed.fuel_types_by_ba) | {"ERCO"})
     for ba in bas:
         ba_node = b.node("BalancingAuthority", ba)
         for prefix in _EIA930_PREFIXES:
@@ -329,11 +333,13 @@ def sync_graph(
 
 
 def _redact_uri(uri: str) -> str:
-    """Strip any userinfo from a bolt/neo4j URI before it can reach a log line."""
+    """Strip any userinfo from a bolt/neo4j URI before it can reach a log line
+    (scheme-less strings like ``user:pass@host:7687`` included)."""
     scheme, sep, rest = uri.partition("://")
-    if sep and "@" in rest:
-        rest = rest.rsplit("@", 1)[1]
-    return f"{scheme}{sep}{rest}"
+    host = rest if sep else scheme
+    if "@" in host:
+        host = host.rsplit("@", 1)[1]
+    return f"{scheme}{sep}{host}" if sep else host
 
 
 def create_driver(cfg: Neo4jConfig) -> Any:

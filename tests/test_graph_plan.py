@@ -96,3 +96,16 @@ def test_plan_is_deduplicated_and_all_edge_endpoints_exist():
     node_set = set(keys)
     for e in plan.edges:
         assert e.src in node_set and e.dst in node_set
+
+
+def test_fuel_only_ba_becomes_a_full_node_with_instruments():
+    # The two observed inputs come from different libraries (different assets), so
+    # a BA can appear in fuel_types_by_ba without being in balancing_authorities.
+    # It must still become a full plan node (provenance stamps + instruments), not
+    # a bare node silently MERGEd into existence by the GENERATES edge statement.
+    plan = _plan(graph.ObservedEntities(fuel_types_by_ba={"MISO": ("COL",)}))
+    assert _node(plan, "BalancingAuthority", "MISO") is not None
+    assert _node(plan, "Instrument", "EIA930.D.MISO") is not None
+    node_set = {(n.label, n.key) for n in plan.nodes}
+    for e in plan.edges:
+        assert e.src in node_set and e.dst in node_set

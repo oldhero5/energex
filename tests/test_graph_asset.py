@@ -118,3 +118,32 @@ def test_integrity_check_fails_on_empty_graph():
         dg.build_asset_context(), neo4j=FakeNeo4j(FakeDriver())
     )
     assert result.passed is False
+
+
+def test_schedule_skips_when_neo4j_unreachable(monkeypatch):
+    from energex.core import graph as core_graph
+    from energex.core.exceptions import GraphError
+    from energex.orchestration.graph import entity_graph_schedule
+
+    def boom(cfg):
+        raise GraphError("Neo4j connection failed: ServiceUnavailable")
+
+    monkeypatch.setattr(core_graph, "create_driver", boom)
+    result = entity_graph_schedule(dg.build_schedule_context())
+    assert isinstance(result, dg.SkipReason)
+
+
+def test_schedule_fires_and_closes_probe_driver_when_reachable(monkeypatch):
+    from energex.core import graph as core_graph
+    from energex.orchestration.graph import entity_graph_schedule
+
+    class ProbeDriver:
+        closed = False
+
+        def close(self):
+            ProbeDriver.closed = True
+
+    monkeypatch.setattr(core_graph, "create_driver", lambda cfg: ProbeDriver())
+    result = entity_graph_schedule(dg.build_schedule_context())
+    assert isinstance(result, dg.RunRequest)
+    assert ProbeDriver.closed is True

@@ -112,3 +112,34 @@ def test_driver_closed_on_shutdown(monkeypatch, client):
     with client as c:
         c.get("/graph/entities")
     assert driver.closed is True
+
+
+def test_failed_connect_backs_off_without_reattempting(monkeypatch, client):
+    calls = {"n": 0}
+
+    def boom(cfg):
+        calls["n"] += 1
+        raise GraphError("Neo4j connection failed: ServiceUnavailable")
+
+    monkeypatch.setattr(core_graph, "create_driver", boom)
+    with client as c:
+        assert c.get("/graph/entities").status_code == 503
+        # within GRAPH_RETRY_SECONDS the second request fails fast: no new attempt
+        assert c.get("/graph/entities").status_code == 503
+    assert calls["n"] == 1
+
+
+class BrokenQueryDriver(FakeDriver):
+    """Connects fine, then every query blows up (e.g. neo4j died mid-flight)."""
+
+    def execute_query(self, query_, parameters_=None, database_=None, **_kw):
+        raise RuntimeError("bolt connection reset")
+
+
+def test_query_time_failure_returns_503_on_both_endpoints(monkeypatch, client):
+    _install_driver(monkeypatch, BrokenQueryDriver())
+    with client as c:
+        response = c.get("/graph/entities")
+        assert response.status_code == 503
+        response = c.get("/graph/related", params={"instrument_id": "FRED.WTI.SPOT"})
+        assert response.status_code == 503
