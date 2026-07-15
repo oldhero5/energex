@@ -25,6 +25,7 @@ def test_definitions_builds_with_intraday_slice():
     assert "ercot_rt_spp" in asset_keys
     assert "ercot_dam_spp" in asset_keys
     assert "ercot_load" in asset_keys
+    assert "entity_graph" in asset_keys
 
     # asset_checks MUST be wired explicitly (spec §5.6); key by check name.
     check_keys = {key.name for key in repo.asset_checks_defs_by_key}
@@ -38,6 +39,7 @@ def test_definitions_builds_with_intraday_slice():
     assert "ercot_rt_spp_pass_quality_gate" in check_keys
     assert "ercot_dam_spp_pass_quality_gate" in check_keys
     assert "ercot_load_pass_quality_gate" in check_keys
+    assert "entity_graph_instruments_resolve" in check_keys
 
 
 def test_dagster_definitions_validate_cli():
