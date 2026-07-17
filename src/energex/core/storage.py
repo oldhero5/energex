@@ -48,6 +48,17 @@ def _naive(date_range):
 
 
 # ---------------------------------------------------------------- canonical frame
+def _dedup_key(df) -> pd.Index:
+    """Row identity for dedup: the Datetime index, extended by fuel_type when present.
+
+    EIA-930 generation-by-fuel frames carry ~10 rows per (BA, hour) distinguished only
+    by the fuel_type column; keying dedup on the index alone would silently drop all
+    but one fuel per hour."""
+    if "fuel_type" in df.columns:
+        return pd.MultiIndex.from_arrays([df.index, df["fuel_type"]])
+    return df.index
+
+
 def _canonicalize(frame, as_of, source, source_url, fetched_at, reconstructed=False):
     """tz-aware-UTC -> tz-naive-UTC DatetimeIndex named 'Datetime', sorted+unique, + provenance."""
     if "valid_time" not in frame.columns:
@@ -59,8 +70,10 @@ def _canonicalize(frame, as_of, source, source_url, fetched_at, reconstructed=Fa
         # pandas has no date dtype -> store as datetime64 (re-cast to pl.Date on read).
         df["ContractMonth"] = pd.to_datetime(df["ContractMonth"])
     df.index = pd.DatetimeIndex(df["valid_time"].to_numpy(), name="Datetime")
-    df = df.sort_index()
-    df = df[~df.index.duplicated(keep="last")]
+    # Stable sort: ArcticDB validate_index only needs a sorted index (duplicate
+    # timestamps are fine), and keep="last" must see input row order within a timestamp.
+    df = df.sort_index(kind="stable")
+    df = df[~_dedup_key(df).duplicated(keep="last")]
     df["as_of"] = _naive_utc(as_of)
     df["source"] = source
     df["source_url"] = source_url
@@ -240,14 +253,14 @@ def write_bars(lib, symbol, frame, *, fetched_at, mode=None) -> int:
     if not lib.has_symbol(symbol):
         return int(lib.write(symbol, cframe, validate_index=True).version)
     existing = lib.read(symbol).data
-    new = cframe[~cframe.index.isin(existing.index)]
+    new = cframe[~_dedup_key(cframe).isin(_dedup_key(existing))]
     if len(new) == 0:
         return _latest_version(lib, symbol)  # idempotent no-op
     if new.index.min() > existing.index.max():
         return int(lib.append(symbol, new, validate_index=True).version)
     combined = pd.concat([existing, new])
-    combined = combined[~combined.index.duplicated(keep="last")].sort_index()
-    return int(lib.write(symbol, combined, validate_index=True).version)
+    combined = combined[~_dedup_key(combined).duplicated(keep="last")]
+    return int(lib.write(symbol, combined.sort_index(kind="stable"), validate_index=True).version)
 
 
 def read_as_of(lib, symbol, *, as_of=None, date_range=None, mode=None):
