@@ -77,6 +77,38 @@ class HttpResource(ConfigurableResource):
         return httpx.Client(timeout=self.timeout)
 
 
+class Neo4jResource(ConfigurableResource):
+    """Opens the entity-graph driver in ``setup_for_execution``. Credentials come
+    from Dagster ``EnvVar`` (kept out of the UI and run logs); connection failures
+    surface redacted via ``core.graph.create_driver``. The graph is optional
+    (compose ``full`` profile only): a failed connect fails the RUN, never
+    Definitions load."""
+
+    uri: str
+    user: str
+    password: str
+
+    _driver: Any = PrivateAttr(default=None)
+
+    def setup_for_execution(self, context) -> None:  # noqa: ARG002 (dagster hook signature)
+        from pydantic import SecretStr
+
+        from energex.core import graph
+        from energex.core.config import Neo4jConfig
+
+        cfg = Neo4jConfig(uri=self.uri, user=self.user, password=SecretStr(self.password))
+        self._driver = graph.create_driver(cfg)
+
+    def teardown_after_execution(self, context) -> None:  # noqa: ARG002
+        if self._driver is not None:
+            self._driver.close()
+            self._driver = None
+
+    @property
+    def driver(self) -> Any:
+        return self._driver
+
+
 RESOURCES: dict[str, object] = {
     "arctic": ArcticDBResource(
         endpoint=EnvVar("MINIO_ENDPOINT"),
@@ -86,4 +118,9 @@ RESOURCES: dict[str, object] = {
         secret_key=EnvVar("MINIO_SECRET_KEY"),
     ),
     "http": HttpResource(),
+    "neo4j": Neo4jResource(
+        uri=EnvVar("NEO4J_URI"),
+        user=EnvVar("NEO4J_USER"),
+        password=EnvVar("NEO4J_PASSWORD"),
+    ),
 }

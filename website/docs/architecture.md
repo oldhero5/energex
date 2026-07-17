@@ -51,9 +51,10 @@ RT/DA SPP + load · FRED ·                                            │
 EIA fundamentals · NOAA                          ┌──────────────────┴───────────────────┐
                                                  ▼                                       ▼
                           Dagster (assets · schedules · checks · reconcile)   S2 read API (FastAPI)
-                                                                                         │
-                                                                                         ▼
-                                                                          S4 frontend / S3 agent
+                                                 │                                       │
+                                                 ▼ (daily, idempotent MERGE)             ▼
+                          Neo4j entity graph (what/who/connected           S4 frontend / S3 agent
+                                              — never the numbers)
 ```
 
 1. A **connector** (`energex.core.connectors`) fetches a window from a source and returns a
@@ -74,6 +75,10 @@ EIA fundamentals · NOAA                          ┌─────────
 5. The **S2 read API** (`energex.service.readapi`) serves the store point-in-time over HTTP —
    the only contract the frontend consumes. See
    [Frontend Integration](./frontend-integration.md).
+6. The **[entity graph](./entity-graph.md)** (`energex.core.graph` + a daily Dagster
+   sync) mirrors the *identity* layer — instruments, balancing authorities, settlement
+   points, regions, commodities — into Neo4j. It references `instrument_id`s and never
+   owns a number.
 
 ## Symbology — the single router
 

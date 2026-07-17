@@ -62,7 +62,7 @@ account, never the MinIO root. The full annotated list lives in
 | `dagster-postgres` | — | Dagster instance storage |
 | `minio` | 9000 / 9001 | ArcticDB object store + web console |
 | `minio-init` | — | One-shot: creates the bucket and scoped service account |
-| `neo4j` | 7474 / 7687 | Optional entity graph |
+| `neo4j` | 7474 / 7687 | Optional [entity graph](./entity-graph.md) (synced daily by the `entity_graph` asset) |
 
 The `api` service is the **only** contract the separate, private frontend consumes — see
 [Frontend Integration](./frontend-integration.md).
@@ -85,6 +85,7 @@ primary power feeds lead the cadence; oil/gas/weather follow as supporting conte
 | FRED spot | Daily (weekday mornings) | WTI / Brent / Henry Hub benchmark spot |
 | EIA fundamentals | Weekly (gas Thu, crude Wed) | Lower-48 gas storage, crude stocks ex-SPR |
 | NOAA degree days | Monthly | HDD/CDD by US region |
+| Entity graph | Daily 06:10 ET | Neo4j [entity-graph](./entity-graph.md) catalog sync (instruments, BAs, hubs) |
 
 To verify it is alive, open the Dagster UI and confirm the schedules show as running, or
 trigger a single asset run from the asset graph and watch it land in MinIO. Full detail

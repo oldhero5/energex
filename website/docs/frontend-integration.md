@@ -57,11 +57,20 @@ never leaks the future.
 
 | Method & path | Query params | Returns |
 |---|---|---|
-| `GET /healthz` | — | `{status, libraries, latest_as_of}` (cheap probe; never auth-gated) |
+| `GET /healthz` | — | `{status, libraries, latest_as_of, graph}` (cheap probe; never auth-gated) |
 | `GET /libraries` | — | `["power.lmp", "power.demand", …]` — the ArcticDB libraries present |
 | `GET /symbols` | `library` (required) | symbols in a library (the `*__vintages` sidecars are hidden) |
 | `GET /series` | `library`, `symbol` (required); `as_of`, `start`, `end` (optional) | `read_as_of` rows as JSON records |
 | `GET /curve` | `commodity` (required); `as_of` (optional) | the assembled forward curve as JSON records |
+| `GET /graph/entities` | `label` (optional) | [entity-graph](./entity-graph.md) catalog nodes `[{label, key, properties}, …]` |
+| `GET /graph/related` | `instrument_id` (required); `depth` (optional, 1–3) | connected entities + sibling instruments for discovery |
+
+The `/graph/*` endpoints serve the **current-state** [entity graph](./entity-graph.md)
+(no `as_of` — catalog facts carry `first_seen`/`last_seen` provenance instead) and are
+**optional**: they return `503` when the `full` profile's Neo4j is not running, while
+every series endpoint keeps working. `healthz.graph` reflects the cached graph
+connection state. Like every other data endpoint, they are gated by the optional API
+key (see [Auth](#auth-optional-api-key)).
 
 ### `GET /healthz`
 
@@ -151,7 +160,8 @@ for the full bitemporal model.
 ## Auth (optional API key)
 
 Auth is **opt-in**. When the `ENERGEX_READ_API_KEY` environment variable is set, every
-data endpoint (`/libraries`, `/symbols`, `/series`, `/curve`) requires a matching
+data endpoint (`/libraries`, `/symbols`, `/series`, `/curve`, `/graph/entities`,
+`/graph/related`) requires a matching
 `X-API-Key` header, compared in constant time. `/healthz` stays open so probes keep
 working. When the variable is **unset** the API is open and logs a startup warning. A
 missing or invalid key returns **`401`**.

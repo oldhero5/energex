@@ -62,5 +62,9 @@ class SymbologyError(EnergexError):
     """Raised when an instrument_id cannot be resolved or its mode is inconsistent."""
 
 
+class GraphError(EnergexError):
+    """Raised on Neo4j entity-graph connection or sync failures."""
+
+
 class PartitionError(EnergexError):
     """Raised when a Dagster partition key cannot be mapped to a valid_time range."""

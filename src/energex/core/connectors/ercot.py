@@ -61,6 +61,12 @@ _SETTLEMENT_POINTS = frozenset(
 )
 
 
+def settlement_points() -> frozenset[str]:
+    """The canonical tradeable settlement points (hubs + load zones) this
+    connector ingests. Public so the entity graph never reaches into privates."""
+    return _SETTLEMENT_POINTS
+
+
 def _is_retryable(exc: BaseException) -> bool:
     """Retry only transient failures: transport/timeout errors and 5xx responses. Never retry
     4xx (bad creds, bad request) — retrying those just hammers ERCOT's auth/API and risks

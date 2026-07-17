@@ -119,6 +119,24 @@ jobs:
           tests/test_connector_weather.py
           tests/test_readapi.py
 
+  graph-gate:
+    name: Entity graph gate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      - name: entity-graph suite (offline; fake driver, no Neo4j service)
+        run: >
+          uv run --extra graph --extra storage --extra quality --extra service
+          --extra orchestration --extra dev pytest -q
+          tests/test_graph_vocab.py
+          tests/test_graph_plan.py
+          tests/test_graph_sync.py
+          tests/test_graph_asset.py
+          tests/test_graph_api.py
+
   secrets:
     name: Secret scan (gitleaks)
     runs-on: ubuntu-latest

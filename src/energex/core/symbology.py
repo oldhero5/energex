@@ -138,3 +138,15 @@ def mode_for_library(library: str) -> str:
         return LIBRARY_MODE[library]
     except KeyError as exc:
         raise SymbologyError(f"unknown library {library!r}") from exc
+
+
+def instruments() -> list[str]:
+    """The static instrument_id universe (a copy). Rule-based power ids
+    (EIA930.*/ERCOT.*) are not enumerable here — discover them from the store
+    and route via power_prefixes()."""
+    return list(_TABLE)
+
+
+def power_prefixes() -> dict[str, tuple[str, str]]:
+    """prefix -> (library, revision_mode) for the rule-based power namespace (a copy)."""
+    return dict(_POWER_PREFIX)
